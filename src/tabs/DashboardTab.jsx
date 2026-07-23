@@ -12,6 +12,7 @@ import {
 export default function DashboardTab({ data, saveData }) {
   const navigate = useNavigate();
   const [showSales, setShowSales] = useState(false);
+  const [showExpenses, setShowExpenses] = useState(false);
 
   // Date helpers
   const todayYMD = useMemo(() => {
@@ -143,6 +144,51 @@ export default function DashboardTab({ data, saveData }) {
                         {sale.cashAmount > 0 && sale.onlineAmount > 0 ? ' / ' : ''}
                         {sale.onlineAmount > 0 ? `Online: ${sale.onlineAmount.toLocaleString('en-IN')}` : ''}
                       </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Expenses History */}
+      <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 mt-6 ${showExpenses ? 'flex-1 min-h-[300px]' : ''}`}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-base font-bold text-gray-800">Recent Expenses History</h3>
+          <button 
+            onClick={() => setShowExpenses(!showExpenses)} 
+            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors duration-200 cursor-pointer"
+          >
+            {showExpenses ? 'Hide Expenses' : 'Show Expenses'}
+          </button>
+        </div>
+        {showExpenses && (
+          <div className="flex-1 overflow-auto">
+            {data.expenses?.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                No expenses logged yet.
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse border border-gray-200 rounded-lg overflow-hidden">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Date</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Description</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0 text-right text-red-600">Amount</th>
+                    <th className="py-2.5 px-3 pl-4 last:border-r-0">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 text-sm">
+                  {(data.expenses || []).slice(0, 10).map((expense) => (
+                    <tr key={expense.id} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-gray-500 whitespace-nowrap">
+                        {new Date(expense.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 font-medium text-gray-800">{expense.description}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-right font-semibold text-red-600">Rs {expense.amount.toLocaleString('en-IN')}</td>
+                      <td className="py-2.5 px-3 pl-4 last:border-r-0 text-gray-600 font-medium">{expense.remarks || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

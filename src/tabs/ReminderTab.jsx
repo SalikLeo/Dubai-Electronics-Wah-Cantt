@@ -10,6 +10,7 @@ export default function ReminderTab({ data, saveData }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('latest');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('All');
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
   const todayYMD = useMemo(() => {
@@ -110,6 +111,11 @@ export default function ReminderTab({ data, saveData }) {
       result = result.filter(r => r.status === statusFilter);
     }
 
+    // Filter by category
+    if (categoryFilter !== 'All') {
+      result = result.filter(r => r.category === categoryFilter);
+    }
+
     // Filter by search query
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -148,7 +154,7 @@ export default function ReminderTab({ data, saveData }) {
     }
 
     return result;
-  }, [data.reminders, range, searchQuery, sortBy, statusFilter]);
+  }, [data.reminders, range, searchQuery, sortBy, statusFilter, categoryFilter]);
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
@@ -318,9 +324,19 @@ export default function ReminderTab({ data, saveData }) {
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
           >
-            <option value="all">All</option>
+            <option value="all">All Status</option>
             <option value="completed">Received</option>
             <option value="pending">Pending</option>
+          </select>
+          <select
+            className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+          >
+            <option value="All">All Categories</option>
+            {(data.categories || []).map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
           <select
             className="border border-gray-300 rounded-lg px-4 py-2 bg-white text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"

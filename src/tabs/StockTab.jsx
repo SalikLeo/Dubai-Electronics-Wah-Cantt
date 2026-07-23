@@ -22,6 +22,7 @@ export default function StockTab({ data, saveData }) {
   }, [location]);
   
   const [tableSearch, setTableSearch] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
   const todayYMD = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -406,8 +407,8 @@ export default function StockTab({ data, saveData }) {
         </div>
       </div>
 
-      <div className="mb-4 print-hidden">
-        <div className="relative">
+      <div className="mb-4 print-hidden flex gap-4">
+        <div className="relative flex-1">
           <Search className="w-5 h-5 absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           <input 
             type="text" 
@@ -416,6 +417,18 @@ export default function StockTab({ data, saveData }) {
             value={tableSearch}
             onChange={e => setTableSearch(e.target.value)}
           />
+        </div>
+        <div className="w-64 shrink-0">
+          <select
+            value={selectedCategoryFilter}
+            onChange={e => setSelectedCategoryFilter(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700 cursor-pointer"
+          >
+            <option value="All">All Categories</option>
+            {data.categories.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -435,11 +448,13 @@ export default function StockTab({ data, saveData }) {
             </tr>
           </thead>
           <tbody>
-            {data.categories.map(category => {
-              const catItems = data.stock.filter(item => 
-                item.category === category && 
-                item.model.toLowerCase().includes(tableSearch.toLowerCase())
-              );
+            {data.categories
+              .filter(category => selectedCategoryFilter === 'All' || category === selectedCategoryFilter)
+              .map(category => {
+                const catItems = data.stock.filter(item => 
+                  item.category === category && 
+                  item.model.toLowerCase().includes(tableSearch.toLowerCase())
+                );
               if (catItems.length === 0) return null;
               
               const isExpanded = expandedCats[category] !== false; // default true

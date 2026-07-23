@@ -341,9 +341,9 @@ export default function ReminderTab({ data, saveData }) {
               <tr>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold text-center w-12">#</th>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-36">Date Added</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Item Name / Model</th>
+                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Item Name</th>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-40">Category</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold text-center w-24">Qty Needed</th>
+                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold text-center w-24">Quantity</th>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-32">Status</th>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-40">Date Received</th>
                 <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Remarks</th>
@@ -438,7 +438,7 @@ export default function ReminderTab({ data, saveData }) {
             </div>
             <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Item Name / Model *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Item Name *</label>
                 <input
                   type="text"
                   className="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
@@ -563,9 +563,9 @@ export default function ReminderTab({ data, saveData }) {
                     <tr className="bg-slate-800 text-white border-b border-gray-300">
                       <th className="py-2 px-2 border-r border-slate-700 text-center w-8">#</th>
                       <th className="py-2 px-2 border-r border-slate-700">Date Added</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Item Name / Model</th>
+                      <th className="py-2 px-2 border-r border-slate-700">Item Name</th>
                       <th className="py-2 px-2 border-r border-slate-700">Category</th>
-                      <th className="py-2 px-2 border-r border-slate-700 text-center w-16">Qty</th>
+                      <th className="py-2 px-2 border-r border-slate-700 text-center w-16">Quantity</th>
                       <th className="py-2 px-2 border-r border-slate-700">Status</th>
                       <th className="py-2 px-2 border-r border-slate-700">Date Received</th>
                       <th className="py-2 px-2">Remarks</th>

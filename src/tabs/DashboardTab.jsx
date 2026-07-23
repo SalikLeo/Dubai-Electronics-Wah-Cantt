@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   PackagePlus, 
@@ -13,6 +13,27 @@ export default function DashboardTab({ data, saveData }) {
   const navigate = useNavigate();
   const [showSales, setShowSales] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
+  const [liveTime, setLiveTime] = useState('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const options = {
+        timeZone: 'Asia/Karachi',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      };
+      setLiveTime(new Date().toLocaleString('en-IN', options));
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Date helpers
   const todayYMD = useMemo(() => {
@@ -36,7 +57,7 @@ export default function DashboardTab({ data, saveData }) {
           <p className="text-gray-500">Quick management and business metrics overview</p>
         </div>
         <div className="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
-          Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}
+          Time: {liveTime}
         </div>
       </div>
 

@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+}
+
+.font-poppins {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+/* Remove animation and transition delay for instant dropdown opening */
+select, option, [role="menu"], [role="listbox"] {
+  transition: none !important;
+  animation: none !important;
+}
+
+select {
+  color: #111827 !important;
+}
+
+option {
+  color: #111827 !important;
+  background-color: white !important;
+}
+
+/* Print specific styles for A4 dense printing */
+@media print {
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+  
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background-color: white !important;
+  }
+  
+  /* Reset everything to normal document flow to fix pagination overlaps */
+  *, html, body {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+  }
+  
+  .print-hidden, .print-hidden * {
+    display: none !important;
+  }
+
+  .printable-area {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background-color: white !important;
+  }
+}

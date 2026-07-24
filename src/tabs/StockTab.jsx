@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Calendar, Plus, Edit2, Trash2, Printer, ChevronDown, ChevronRight, Check, X, RefreshCw, History, ClipboardList, ShoppingCart, PlusCircle, TrendingUp } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
-export default function StockTab({ data, saveData }) {
+export default function StockTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
   const location = useLocation();
 
@@ -29,6 +29,57 @@ export default function StockTab({ data, saveData }) {
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(todayYMD);
+  const [daysAgoInput, setDaysAgoInput] = useState('');
+
+  const getDaysAgo = useCallback((dateStr) => {
+    if (!dateStr) return 0;
+    const todayParts = todayYMD.split('-').map(Number);
+    const dateParts = dateStr.split('-').map(Number);
+    const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
+    const selDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+    const diffTime = todayDate - selDate;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : 0;
+  }, [todayYMD]);
+
+  useEffect(() => {
+    const targetDays = getDaysAgo(selectedDate);
+    const expectedValue = targetDays === 0 ? '' : String(targetDays);
+    if (daysAgoInput !== expectedValue) {
+      setDaysAgoInput(expectedValue);
+    }
+  }, [selectedDate, todayYMD]);
+
+  const handleDaysAgoChange = (e) => {
+    const val = e.target.value;
+    setDaysAgoInput(val);
+    if (val === '' || parseInt(val, 10) === 0) {
+      setSelectedDate(todayYMD);
+      return;
+    }
+    const days = parseInt(val, 10);
+    if (!isNaN(days) && days >= 0) {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      const targetYMD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      setSelectedDate(targetYMD);
+    }
+  };
+
+  const formatDateDMY = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-').map(Number);
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  };
+
+  const formatReportDate = (dateYMD) => {
+    if (!dateYMD) return '';
+    const diffDays = getDaysAgo(dateYMD);
+    if (diffDays > 0) {
+      return `${formatDateDMY(dateYMD)} to ${formatDateDMY(todayYMD)}`;
+    }
+    return formatDateDMY(dateYMD);
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ model: '', category: data.categories[0] || '', x_b: '', in: '', sale: '', ntd: '' });
@@ -48,16 +99,20 @@ export default function StockTab({ data, saveData }) {
     setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
-  const handleAddSubmit = (e) => {
-    e.preventDefault();
+  const handleAddSubmit = async (e, keepOpen = false) => {
+    if (e) e.preventDefault();
+    if (!addForm.model.trim()) {
+      await alert("Please enter a Model Name.");
+      return;
+    }
     const newItem = {
       id: Date.now().toString(),
-      model: addForm.model,
+      model: addForm.model.trim(),
       category: addForm.category,
-      x_b: Number(addForm.x_b),
-      in: Number(addForm.in),
-      sale: Number(addForm.sale),
-      ntd: Number(addForm.ntd),
+      x_b: Number(addForm.x_b || 0),
+      in: Number(addForm.in || 0),
+      sale: Number(addForm.sale || 0),
+      ntd: Number(addForm.ntd || 0),
     };
     const newTx = {
       id: Date.now().toString() + '1',
@@ -70,17 +125,22 @@ export default function StockTab({ data, saveData }) {
       newNtd: newItem.ntd
     };
     saveData({ ...data, stock: [...data.stock, newItem], history: [...(data.history || []), newTx] });
-    setShowAddModal(false);
-    setAddForm({ model: '', category: data.categories[0] || '', x_b: '', in: '', sale: '', ntd: '' });
+    if (keepOpen) {
+      setAddForm({ model: '', category: addForm.category, x_b: '', in: '', sale: '', ntd: '' });
+    } else {
+      setShowAddModal(false);
+      setAddForm({ model: '', category: data.categories[0] || '', x_b: '', in: '', sale: '', ntd: '' });
+    }
   };
 
-  const handleAddStockSubmit = async (e) => {
-    e.preventDefault();
+  const handleAddStockSubmit = async (e, keepOpen = false) => {
+    if (e) e.preventDefault();
     const stockItem = data.stock.find(s => s.id === addStockForm.stockId);
     if (!stockItem) return await alert("Select a valid item");
 
     const addedQty = Number(addStockForm.in);
-    const addedNtd = Number(addStockForm.ntd);
+    if (addedQty <= 0) return await alert("Please enter a valid quantity to add.");
+    const addedNtd = Number(addStockForm.ntd || 0);
     
     const currentNtd = stockItem.ntd || 0;
 
@@ -105,8 +165,14 @@ export default function StockTab({ data, saveData }) {
       newNtd: newNtd
     };
     saveData({ ...data, stock: updatedStock, history: [...(data.history || []), newTx] });
-    setShowAddStockModal(false);
-    setAddStockForm({ stockId: '', in: '', ntd: '', desc: '' });
+    if (keepOpen) {
+      setAddStockForm({ stockId: '', in: '', ntd: '', desc: '' });
+      setStockSearch('');
+    } else {
+      setShowAddStockModal(false);
+      setAddStockForm({ stockId: '', in: '', ntd: '', desc: '' });
+      setStockSearch('');
+    }
   };
 
   const startEdit = (item) => {
@@ -248,50 +314,156 @@ export default function StockTab({ data, saveData }) {
     window.print();
   };
 
-  // Helper to calculate Stock for any date (X-B for selectedDate equals previous date's BLNC)
-  const getItemStockForDate = useMemo(() => {
-    return (item, dateYMD) => {
-      if (!item) return { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+  // Pre-process history and sales grouped by stockId and with pre-formatted date YMDs
+  const processedStockData = useMemo(() => {
+    const getYMD = (dateString) => {
+      if (!dateString) return '';
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
 
-      const getYMD = (dateString) => {
-        if (!dateString) return '';
-        const d = new Date(dateString);
-        if (isNaN(d.getTime())) return '';
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      };
+    const stockInMap = {};
+    (data.history || []).forEach(h => {
+      if (h.type === 'Stock In') {
+        const id = h.stockId;
+        if (!stockInMap[id]) stockInMap[id] = [];
+        stockInMap[id].push({
+          qty: Number(h.qty || 0),
+          ymd: getYMD(h.date)
+        });
+      }
+    });
 
-      // Stock In history
-      const stockInHistory = (data.history || []).filter(h => h.stockId === item.id && h.type === 'Stock In');
-      const inBefore = stockInHistory
-        .filter(h => getYMD(h.date) < dateYMD)
-        .reduce((sum, h) => sum + Number(h.qty || 0), 0);
-      const inOnDate = stockInHistory
-        .filter(h => getYMD(h.date) === dateYMD)
-        .reduce((sum, h) => sum + Number(h.qty || 0), 0);
+    const salesMap = {};
+    (data.sales || []).forEach(s => {
+      const id = s.stockId;
+      if (!salesMap[id]) salesMap[id] = [];
+      salesMap[id].push({
+        qty: Number(s.qty || 0),
+        ymd: getYMD(s.date)
+      });
+    });
 
-      // Sales history
-      const salesHistory = (data.sales || []).filter(s => s.stockId === item.id);
-      const saleBefore = salesHistory
-        .filter(s => getYMD(s.date) < dateYMD)
-        .reduce((sum, s) => sum + Number(s.qty || 0), 0);
-      const saleOnDate = salesHistory
-        .filter(s => getYMD(s.date) === dateYMD)
-        .reduce((sum, s) => sum + Number(s.qty || 0), 0);
+    return { stockInMap, salesMap };
+  }, [data.history, data.sales]);
 
-      // Base initial X-B
+  // Pre-calculate stock levels for the selectedDate to avoid repeating loops for each render call
+  const itemsStockForSelectedDate = useMemo(() => {
+    const { stockInMap, salesMap } = processedStockData;
+    const diffDays = getDaysAgo(selectedDate);
+    const stockMap = {};
+
+    (data?.stock || []).forEach(item => {
+      const stockInHistory = stockInMap[item.id] || [];
+      const salesHistory = salesMap[item.id] || [];
+
+      let inBefore = 0;
+      let inOnRange = 0;
+      for (let i = 0; i < stockInHistory.length; i++) {
+        const h = stockInHistory[i];
+        if (h.ymd < selectedDate) {
+          inBefore += h.qty;
+        } else if (diffDays > 0 ? (h.ymd >= selectedDate && h.ymd <= todayYMD) : h.ymd === selectedDate) {
+          inOnRange += h.qty;
+        }
+      }
+
+      let saleBefore = 0;
+      let saleOnRange = 0;
+      for (let i = 0; i < salesHistory.length; i++) {
+        const s = salesHistory[i];
+        if (s.ymd < selectedDate) {
+          saleBefore += s.qty;
+        } else if (diffDays > 0 ? (s.ymd >= selectedDate && s.ymd <= todayYMD) : s.ymd === selectedDate) {
+          saleOnRange += s.qty;
+        }
+      }
+
       const baseXB = Number(item.x_b || 0);
-
-      // X-B for selectedDate = baseXB + Stock In BEFORE selectedDate - Sales BEFORE selectedDate
-      // (This is identical to previous date's ending BLNC)
       const x_b = Math.max(0, baseXB + inBefore - saleBefore);
-      const inQty = inOnDate;
+      const inQty = inOnRange;
       const tb = x_b + inQty;
-      const saleQty = saleOnDate;
+      const saleQty = saleOnRange;
       const blnc = tb - saleQty;
 
-      return { x_b, in: inQty, tb, sale: saleQty, blnc };
-    };
-  }, [data.history, data.sales]);
+      stockMap[item.id] = { x_b, in: inQty, tb, sale: saleQty, blnc };
+    });
+
+    return stockMap;
+  }, [data?.stock, processedStockData, getDaysAgo, selectedDate, todayYMD]);
+
+  // Helper to calculate Stock for any date (X-B for selectedDate equals previous date's BLNC)
+  // Keeps same signature, but uses the cached itemsStockForSelectedDate for the active date.
+  const getItemStockForDate = useCallback((item, dateYMD) => {
+    if (!item) return { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+    if (dateYMD === selectedDate) {
+      return itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+    }
+
+    const { stockInMap, salesMap } = processedStockData;
+    const diffDays = getDaysAgo(dateYMD);
+    const stockInHistory = stockInMap[item.id] || [];
+    const salesHistory = salesMap[item.id] || [];
+
+    let inBefore = 0;
+    let inOnRange = 0;
+    for (let i = 0; i < stockInHistory.length; i++) {
+      const h = stockInHistory[i];
+      if (h.ymd < dateYMD) {
+        inBefore += h.qty;
+      } else if (diffDays > 0 ? (h.ymd >= dateYMD && h.ymd <= todayYMD) : h.ymd === dateYMD) {
+        inOnRange += h.qty;
+      }
+    }
+
+    let saleBefore = 0;
+    let saleOnRange = 0;
+    for (let i = 0; i < salesHistory.length; i++) {
+      const s = salesHistory[i];
+      if (s.ymd < dateYMD) {
+        saleBefore += s.qty;
+      } else if (diffDays > 0 ? (s.ymd >= dateYMD && s.ymd <= todayYMD) : s.ymd === dateYMD) {
+        saleOnRange += s.qty;
+      }
+    }
+
+    const baseXB = Number(item.x_b || 0);
+    const x_b = Math.max(0, baseXB + inBefore - saleBefore);
+    const inQty = inOnRange;
+    const tb = x_b + inQty;
+    const saleQty = saleOnRange;
+    const blnc = tb - saleQty;
+
+    return { x_b, in: inQty, tb, sale: saleQty, blnc };
+  }, [itemsStockForSelectedDate, selectedDate, processedStockData, getDaysAgo, todayYMD]);
+
+  // Pre-filter stock list by search term
+  const filteredStock = useMemo(() => {
+    const searchLower = tableSearch.toLowerCase().trim();
+    if (!searchLower) return data.stock || [];
+    return (data.stock || []).filter(item => item.model.toLowerCase().includes(searchLower));
+  }, [data.stock, tableSearch]);
+
+  // Group filtered stock by category
+  const stockByCategory = useMemo(() => {
+    const map = {};
+    filteredStock.forEach(item => {
+      if (!map[item.category]) map[item.category] = [];
+      map[item.category].push(item);
+    });
+    return map;
+  }, [filteredStock]);
+
+  // Group all stock by category (for print preview and fallback uses)
+  const allStockByCategory = useMemo(() => {
+    const map = {};
+    (data.stock || []).forEach(item => {
+      if (!map[item.category]) map[item.category] = [];
+      map[item.category].push(item);
+    });
+    return map;
+  }, [data.stock]);
 
   // Chronologically calculate running cost prices for the selected purchase history item
   const chronologicalPrices = useMemo(() => {
@@ -359,10 +531,10 @@ export default function StockTab({ data, saveData }) {
   // Calculations based on selectedDate
   const globalTotalValue = useMemo(() => {
     return (data?.stock || []).reduce((acc, item) => {
-      const { blnc } = getItemStockForDate(item, selectedDate);
+      const { blnc } = itemsStockForSelectedDate[item.id] || { blnc: 0 };
       return acc + (blnc * (item.ntd || 0));
     }, 0);
-  }, [data?.stock, getItemStockForDate, selectedDate]);
+  }, [data?.stock, itemsStockForSelectedDate]);
 
   return (
     <>
@@ -382,9 +554,20 @@ export default function StockTab({ data, saveData }) {
               onChange={e => setSelectedDate(e.target.value)}
               className="text-sm font-medium text-gray-800 outline-none bg-transparent cursor-pointer"
             />
+          </div>
+          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+            <span className="text-xs font-semibold text-gray-600 uppercase">Days Ago:</span>
+            <input 
+              type="number" 
+              min="0"
+              placeholder="0"
+              value={daysAgoInput} 
+              onChange={handleDaysAgoChange}
+              className="w-12 text-sm font-medium text-gray-800 outline-none bg-transparent"
+            />
             {selectedDate !== todayYMD && (
               <button 
-                onClick={() => setSelectedDate(todayYMD)}
+                onClick={() => { setSelectedDate(todayYMD); setDaysAgoInput('0'); }}
                 className="text-gray-400 hover:text-red-500 hover:bg-gray-100 p-0.5 rounded-full transition ml-1"
                 title="Reset to today"
               >
@@ -392,6 +575,11 @@ export default function StockTab({ data, saveData }) {
               </button>
             )}
           </div>
+          {getDaysAgo(selectedDate) > 0 && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 shadow-sm text-sm font-semibold">
+              <span>Range: {formatReportDate(selectedDate)}</span>
+            </div>
+          )}
           <button onClick={() => { setShowGlobalHistory(true); setPurchaseHistoryItem(null); setGlobalHistoryFilter('All'); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium shadow-sm transition">
             <TrendingUp className="w-4 h-4" /> Sales History
           </button>
@@ -451,15 +639,12 @@ export default function StockTab({ data, saveData }) {
             {data.categories
               .filter(category => selectedCategoryFilter === 'All' || category === selectedCategoryFilter)
               .map(category => {
-                const catItems = data.stock.filter(item => 
-                  item.category === category && 
-                  item.model.toLowerCase().includes(tableSearch.toLowerCase())
-                );
-              if (catItems.length === 0) return null;
+                const catItems = stockByCategory[category] || [];
+                if (catItems.length === 0) return null;
               
               const isExpanded = expandedCats[category] !== false; // default true
               const catTotals = catItems.reduce((totals, item) => {
-                const { x_b, in: inQty, tb, sale: saleQty, blnc } = getItemStockForDate(item, selectedDate);
+                const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
                 totals.x_b += x_b;
                 totals.in += inQty;
                 totals.tb += tb;
@@ -485,7 +670,7 @@ export default function StockTab({ data, saveData }) {
 
                   {/* Category Items */}
                   {isExpanded && catItems.map((item, index) => {
-                    const { x_b, in: inQty, tb, sale: saleQty, blnc } = getItemStockForDate(item, selectedDate);
+                    const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
                     const editing = isEditing === item.id;
 
                     return (
@@ -618,8 +803,9 @@ export default function StockTab({ data, saveData }) {
               </div>
               
               <div className="flex gap-3 justify-end mt-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition">Save Item</button>
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition cursor-pointer">Cancel</button>
+                <button type="button" onClick={(e) => handleAddSubmit(e, true)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition cursor-pointer">Save Next Item</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium transition cursor-pointer">Save Item</button>
               </div>
             </form>
           </div>
@@ -707,8 +893,9 @@ export default function StockTab({ data, saveData }) {
               </div>
 
               <div className="flex gap-3 justify-end mt-4">
-                <button type="button" onClick={() => setShowAddStockModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition">Add Stock</button>
+                <button type="button" onClick={() => setShowAddStockModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition cursor-pointer">Cancel</button>
+                <button type="button" onClick={(e) => handleAddStockSubmit(e, true)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium transition cursor-pointer">Add Next Stock</button>
+                <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition cursor-pointer">Add Stock</button>
               </div>
             </form>
           </div>
@@ -936,10 +1123,12 @@ export default function StockTab({ data, saveData }) {
                 <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                   <div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
-                    <p className="text-sm font-semibold text-gray-600">Stock Inventory Report ({selectedDate})</p>
+                    <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
+                    <p className="text-sm font-semibold text-gray-600 mt-1">Stock Inventory Report</p>
+                    {data.settings?.branchAddress && <p className="text-[10px] text-gray-500 mt-0.5">{data.settings.branchAddress}</p>}
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    <p>Report Date: {selectedDate}</p>
+                    <p>Report Date: {formatReportDate(selectedDate)}</p>
                     <p>Total Stock Items: {data.stock.length}</p>
                   </div>
                 </div>
@@ -959,9 +1148,11 @@ export default function StockTab({ data, saveData }) {
                   </thead>
                   <tbody>
                     {data.categories.map(category => {
-                      const catItems = data.stock.filter(item => item.category === category);
+                      const catItems = allStockByCategory[category] || [];
+                      if (catItems.length === 0) return null;
+
                       const catTotals = catItems.reduce((totals, item) => {
-                        const { x_b, in: inQty, tb, sale: saleQty, blnc } = getItemStockForDate(item, selectedDate);
+                        const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
                         totals.x_b += x_b;
                         totals.in += inQty;
                         totals.tb += tb;
@@ -971,8 +1162,6 @@ export default function StockTab({ data, saveData }) {
                         return totals;
                       }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: 0 });
 
-                      if (catItems.length === 0) return null;
-
                       return (
                         <React.Fragment key={category}>
                           <tr className="bg-gray-200 font-bold border-b border-gray-300">
@@ -981,7 +1170,7 @@ export default function StockTab({ data, saveData }) {
                             </td>
                           </tr>
                           {catItems.map((item, index) => {
-                            const { x_b, in: inQty, tb, sale: saleQty, blnc } = getItemStockForDate(item, selectedDate);
+                            const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
                             return (
                               <tr key={item.id} className="border-b border-gray-200">
                                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{index + 1}</td>

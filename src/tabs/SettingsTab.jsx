@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
-export default function SettingsTab({ data, saveData }) {
+export default function SettingsTab({ data, saveData, activeBranch, fullDbData, saveFullDbData }) {
   const { alert, confirm } = useDialog();
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
   const [newPasswordInput, setNewPasswordInput] = useState('');
@@ -10,12 +10,20 @@ export default function SettingsTab({ data, saveData }) {
   const [localCategories, setLocalCategories] = useState([...(data.categories || [])]);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategory, setNewCategory] = useState('');
+  const [branchAddress, setBranchAddress] = useState(data.settings?.branchAddress || '');
+  const [branchPhone, setBranchPhone] = useState(data.settings?.branchPhone || '');
   const fileInputRef = useRef(null);
   const dataInputRef = useRef(null);
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [showClearDataModal, setShowClearDataModal] = useState(false);
   const [clearDataPasswordInput, setClearDataPasswordInput] = useState('');
   const [clearDataError, setClearDataError] = useState('');
+
+  useEffect(() => {
+    setLocalCategories([...(data.categories || [])]);
+    setBranchAddress(data.settings?.branchAddress || '');
+    setBranchPhone(data.settings?.branchPhone || '');
+  }, [data]);
 
   const handleAddCategory = () => {
     if (newCategory.trim() && !localCategories.includes(newCategory.trim())) {
@@ -57,7 +65,7 @@ export default function SettingsTab({ data, saveData }) {
 
   const handleSavePositions = async () => {
     saveData({ ...data, categories: localCategories });
-    await alert('Category positions saved successfully!');
+    await alert('Categories saved successfully!');
   };
 
   const closeCategoryModal = () => {
@@ -126,7 +134,12 @@ export default function SettingsTab({ data, saveData }) {
     saveData({ 
       ...data, 
       categories: localCategories,
-      settings: { ...data.settings, password: finalPassword }
+      settings: { 
+        ...data.settings, 
+        password: finalPassword,
+        branchAddress: branchAddress,
+        branchPhone: branchPhone
+      }
     });
 
     setCurrentPasswordInput('');
@@ -147,25 +160,36 @@ export default function SettingsTab({ data, saveData }) {
   };
 
   const triggerClearDataFinal = async () => {
-    if (await confirm('Are you sure you want to delete all app data completely? This will clear all stock, sales, expenses, employees, and settings. This action cannot be undone!')) {
-      const clearedData = {
-        settings: {
-          appIcon: null,
-          password: ""
-        },
+    if (await confirm('Are you sure you want to delete all app data completely? This will clear all stock, sales, expenses, employees, and settings for ALL branches. This action cannot be undone!')) {
+      const DEFAULT_BRANCH_DATA = {
+        settings: { appIcon: null, password: "", branchAddress: "", branchPhone: "" },
         categories: ["Refrigerators", "Deep Freezers", "Washing Machines", "Air Conditioners", "Microwave Ovens"],
-        stock: [],
-        sales: [],
-        expenses: [],
-        employees: []
+        stock: [], sales: [], expenses: [], employees: []
       };
-      saveData(clearedData);
-      setLocalCategories(clearedData.categories);
+      
+      const clearedDb = {
+        activeBranch: "Wah Cantt",
+        branches: {
+          "Wah Cantt": {
+            ...DEFAULT_BRANCH_DATA,
+            settings: {
+              ...DEFAULT_BRANCH_DATA.settings,
+              branchAddress: "Al-Noor Shopping Mall, Bahatar Morr Main G.T Road, Wah Cantt",
+              branchPhone: "051-4916830"
+            }
+          },
+          "Pindi Gheb": JSON.parse(JSON.stringify(DEFAULT_BRANCH_DATA)),
+          "Fateh Jung": JSON.parse(JSON.stringify(DEFAULT_BRANCH_DATA))
+        }
+      };
+      
+      await saveFullDbData(clearedDb);
+      setLocalCategories(clearedDb.branches[activeBranch].categories);
       setCurrentPasswordInput('');
       setNewPasswordInput('');
       setConfirmPasswordInput('');
       setShowClearDataModal(false);
-      await alert('All app data has been successfully cleared.');
+      await alert('All app data has been successfully cleared for all branches.');
     }
   };
 
@@ -181,32 +205,71 @@ export default function SettingsTab({ data, saveData }) {
   };
 
   const backupData = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullDbData));
     const dlAnchorElem = document.createElement('a');
     dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", `DubaiElectronics_Backup_${new Date().toISOString().split('T')[0]}.json`);
+    dlAnchorElem.setAttribute("download", `DubaiElectronics_AllBranches_Backup_${new Date().toISOString().split('T')[0]}.json`);
     dlAnchorElem.click();
   };
 
   const restoreData = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      if(await confirm('This will OVERWRITE all current data. Are you absolutely sure?')) {
+      if (await confirm('This will OVERWRITE all current data for ALL branches. Are you absolutely sure?')) {
         const reader = new FileReader();
         reader.onload = async (e) => {
           try {
-            const importedData = JSON.parse(e.target.result);
-            if(importedData.stock && importedData.sales) {
-              saveData(importedData);
-              await alert('Data restored successfully!');
-              setLocalCategories(importedData.categories || []);
+            const imported = JSON.parse(e.target.result);
+            
+            // Check if it's the new multi-branch format
+            if (imported.branches && (imported.branches["Wah Cantt"] || imported.branches["Pindi Gheb"] || imported.branches["Fateh Jung"])) {
+              await saveFullDbData(imported);
+              await alert('All branch data restored successfully!');
+              setLocalCategories(imported.branches[activeBranch]?.categories || []);
               setCurrentPasswordInput('');
               setNewPasswordInput('');
               setConfirmPasswordInput('');
-            } else {
-              await alert('Invalid backup file structure.');
+              return;
             }
-          } catch(err) {
+            
+            // If it's the old single-branch format, we migrate it to Wah Cantt and preserve the rest
+            if (imported.stock && imported.sales) {
+              const DEFAULT_BRANCH_DATA = {
+                settings: { appIcon: null, password: "", branchAddress: "", branchPhone: "" },
+                categories: ["Refrigerators", "Deep Freezers", "Washing Machines", "Air Conditioners", "Microwave Ovens"],
+                stock: [], sales: [], expenses: [], employees: []
+              };
+              
+              const migratedDb = {
+                activeBranch: activeBranch, // keep current active branch selection
+                branches: {
+                  "Wah Cantt": imported,
+                  "Pindi Gheb": JSON.parse(JSON.stringify(DEFAULT_BRANCH_DATA)),
+                  "Fateh Jung": JSON.parse(JSON.stringify(DEFAULT_BRANCH_DATA))
+                }
+              };
+              
+              // Ensure migrated Wah Cantt has branch details
+              if (migratedDb.branches["Wah Cantt"].settings) {
+                if (!migratedDb.branches["Wah Cantt"].settings.branchAddress) {
+                  migratedDb.branches["Wah Cantt"].settings.branchAddress = "Al-Noor Shopping Mall, Bahatar Morr Main G.T Road, Wah Cantt";
+                }
+                if (!migratedDb.branches["Wah Cantt"].settings.branchPhone) {
+                  migratedDb.branches["Wah Cantt"].settings.branchPhone = "051-4916830";
+                }
+              }
+              
+              await saveFullDbData(migratedDb);
+              await alert('Old single-branch backup file imported and migrated successfully into the Wah Cantt branch!');
+              setLocalCategories(migratedDb.branches[activeBranch]?.categories || []);
+              setCurrentPasswordInput('');
+              setNewPasswordInput('');
+              setConfirmPasswordInput('');
+              return;
+            }
+            
+            await alert('Invalid backup file structure.');
+          } catch (err) {
             await alert('Failed to parse backup file.');
           }
         };
@@ -240,6 +303,32 @@ export default function SettingsTab({ data, saveData }) {
                 <button onClick={() => fileInputRef.current.click()} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition">
                   Upload Logo
                 </button>
+              </div>
+            </div>
+
+            {/* Branch Details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-200/60">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Address</label>
+                <input 
+                  type="text" 
+                  placeholder={`Enter Address for ${activeBranch} Branch`} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                  value={branchAddress}
+                  onChange={e => setBranchAddress(e.target.value)}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Printed at the top of customer sale invoices/receipts.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Phone / Contact</label>
+                <input 
+                  type="text" 
+                  placeholder={`Enter Phone for ${activeBranch} Branch`} 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                  value={branchPhone}
+                  onChange={e => setBranchPhone(e.target.value)}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Shown under the logo in the sidebar and printed on receipts.</p>
               </div>
             </div>
 
@@ -450,7 +539,7 @@ export default function SettingsTab({ data, saveData }) {
                 onClick={handleSavePositions} 
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium transition flex items-center gap-1.5 w-full justify-center"
               >
-                <Save className="w-4 h-4" /> Save Positions
+                <Save className="w-4 h-4" /> Save
               </button>
             </div>
           </div>

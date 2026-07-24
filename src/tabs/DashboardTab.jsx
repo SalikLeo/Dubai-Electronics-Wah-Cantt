@@ -13,27 +13,7 @@ export default function DashboardTab({ data, saveData }) {
   const navigate = useNavigate();
   const [showSales, setShowSales] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
-  const [liveTime, setLiveTime] = useState('');
-
-  useEffect(() => {
-    const updateTime = () => {
-      const options = {
-        timeZone: 'Asia/Karachi',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      };
-      setLiveTime(new Date().toLocaleString('en-IN', options));
-    };
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  const [showReminders, setShowReminders] = useState(false);
 
   // Date helpers
   const todayYMD = useMemo(() => {
@@ -55,9 +35,6 @@ export default function DashboardTab({ data, saveData }) {
         <div>
           <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
           <p className="text-gray-500">Quick management and business metrics overview</p>
-        </div>
-        <div className="text-sm font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg">
-          Time: {liveTime}
         </div>
       </div>
 
@@ -122,10 +99,10 @@ export default function DashboardTab({ data, saveData }) {
       {/* Recent Transactions List */}
       <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 ${showSales ? 'flex-1 min-h-[300px]' : ''}`}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-bold text-gray-800">Recent Sales History</h3>
+          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Sales History</h3>
           <button 
             onClick={() => setShowSales(!showSales)} 
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors duration-200 cursor-pointer"
+            className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
           >
             {showSales ? 'Hide Sales' : 'Show Sales'}
           </button>
@@ -177,10 +154,10 @@ export default function DashboardTab({ data, saveData }) {
       {/* Recent Expenses History */}
       <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 mt-6 ${showExpenses ? 'flex-1 min-h-[300px]' : ''}`}>
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-bold text-gray-800">Recent Expenses History</h3>
+          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Expenses History</h3>
           <button 
             onClick={() => setShowExpenses(!showExpenses)} 
-            className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-sm transition-colors duration-200 cursor-pointer"
+            className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
           >
             {showExpenses ? 'Hide Expenses' : 'Show Expenses'}
           </button>
@@ -192,7 +169,7 @@ export default function DashboardTab({ data, saveData }) {
                 No expenses logged yet.
               </div>
             ) : (
-              <table className="w-full text-left border-collapse border border-gray-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left border-collapse border border-gray-200 rounded-lg overflow-hidden font-sans">
                 <thead>
                   <tr className="bg-slate-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
                     <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Date</th>
@@ -210,6 +187,63 @@ export default function DashboardTab({ data, saveData }) {
                       <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 font-medium text-gray-800">{expense.description}</td>
                       <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-right font-semibold text-red-600">Rs {expense.amount.toLocaleString('en-IN')}</td>
                       <td className="py-2.5 px-3 pl-4 last:border-r-0 text-gray-600 font-medium">{expense.remarks || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Reminders */}
+      <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 mt-6 ${showReminders ? 'flex-1 min-h-[300px]' : ''}`}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Reminders</h3>
+          <button 
+            onClick={() => setShowReminders(!showReminders)} 
+            className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
+          >
+            {showReminders ? 'Hide Reminders' : 'Show Reminders'}
+          </button>
+        </div>
+        {showReminders && (
+          <div className="flex-1 overflow-auto">
+            {data.reminders?.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                No stock reminders logged yet.
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse border border-gray-200 rounded-lg overflow-hidden font-sans">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Date Added</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Item Name</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Category</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0 text-center w-16">Qty</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0 text-center">Status</th>
+                    <th className="py-2.5 px-3 pl-4 last:border-r-0">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 text-sm">
+                  {(data.reminders || []).slice(0, 10).map((reminder) => (
+                    <tr key={reminder.id} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-gray-500 whitespace-nowrap">
+                        {new Date(reminder.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 font-medium text-gray-800">{reminder.itemName}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-gray-600">{reminder.category}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-center">{reminder.qty}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-center">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          reminder.status === 'received' 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {reminder.status === 'received' ? 'Received' : 'Pending'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 pl-4 last:border-r-0 text-gray-600 font-medium">{reminder.remarks || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

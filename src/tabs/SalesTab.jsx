@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Plus, Printer, Trash2, RefreshCw, ChevronDown, X } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
@@ -11,8 +11,19 @@ const formatIndianNumber = (val) => {
   return num.toLocaleString('en-IN');
 };
 
-export default function SalesTab({ data, saveData }) {
+export default function SalesTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
+
+  const getInvoiceNo = (sale) => {
+    if (!sale) return '';
+    if (sale.invoiceNo) return sale.invoiceNo;
+    const rawSales = data.sales || [];
+    const idx = rawSales.findIndex(s => s.id === sale.id);
+    if (idx !== -1) {
+      return rawSales.length - idx;
+    }
+    return sale.id;
+  };
   const location = useLocation();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,13 +51,65 @@ export default function SalesTab({ data, saveData }) {
   }, []);
 
   const [selectedDate, setSelectedDate] = useState(todayYMD);
+  const [daysAgoInput, setDaysAgoInput] = useState('');
+
+  const getDaysAgo = (dateStr) => {
+    if (!dateStr) return 0;
+    const todayParts = todayYMD.split('-').map(Number);
+    const dateParts = dateStr.split('-').map(Number);
+    const todayDate = new Date(todayParts[0], todayParts[1] - 1, todayParts[2]);
+    const selDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+    const diffTime = todayDate - selDate;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 ? diffDays : 0;
+  };
+
+  useEffect(() => {
+    const targetDays = getDaysAgo(selectedDate);
+    const expectedValue = targetDays === 0 ? '' : String(targetDays);
+    if (daysAgoInput !== expectedValue) {
+      setDaysAgoInput(expectedValue);
+    }
+  }, [selectedDate, todayYMD]);
+
+  const handleDaysAgoChange = (e) => {
+    const val = e.target.value;
+    setDaysAgoInput(val);
+    if (val === '' || parseInt(val, 10) === 0) {
+      setSelectedDate(todayYMD);
+      return;
+    }
+    const days = parseInt(val, 10);
+    if (!isNaN(days) && days >= 0) {
+      const d = new Date();
+      d.setDate(d.getDate() - days);
+      const targetYMD = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      setSelectedDate(targetYMD);
+    }
+  };
+
+  const formatDateDMY = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-').map(Number);
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  };
+
+  const formatReportDate = (dateYMD) => {
+    if (!dateYMD) return '';
+    const diffDays = getDaysAgo(dateYMD);
+    if (diffDays > 0) {
+      return `${formatDateDMY(dateYMD)} to ${formatDateDMY(todayYMD)}`;
+    }
+    return formatDateDMY(dateYMD);
+  };
+
   const [selectedMonth, setSelectedMonth] = useState(currentYM);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [startDate, setStartDate] = useState(todayYMD);
   const [endDate, setEndDate] = useState(todayYMD);
 
   const filterLabel = useMemo(() => {
-    if (filterType === 'Daily') return `Daily (${selectedDate})`;
+    if (filterType === 'Daily') return `Daily (${formatReportDate(selectedDate)})`;
     if (filterType === 'Monthly') return `Monthly (${selectedMonth})`;
     if (filterType === 'Annual') return `Annual (${selectedYear})`;
     if (filterType === 'Custom') return `Custom (${startDate} to ${endDate})`;
@@ -57,6 +120,50 @@ export default function SalesTab({ data, saveData }) {
     cashAmount: '', onlineAmount: '', remarks: '' 
   });
   const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [invoiceNoInput, setInvoiceNoInput] = useState('');
+  const [cashAmt, setCashAmt] = useState(0);
+  const [onlineAmt, setOnlineAmt] = useState(0);
+
+  const resetForm = () => {
+    setSelectedItems([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setInvoiceNoInput('');
+    setAddForm({ cashAmount: '', onlineAmount: '', remarks: '' });
+    setTempForm({ stockId: '', qty: '', salePrice: '' });
+    setStockSearch('');
+    setIsDropdownOpen(false);
+  };
+
+  const getNextInvoiceNo = () => {
+    return (data.sales || []).length + 1;
+  };
+
+  const refreshInvoiceNo = () => {
+    setInvoiceNoInput(getNextInvoiceNo().toString());
+  };
+
+  useEffect(() => {
+    if (showAddModal) {
+      setInvoiceNoInput(getNextInvoiceNo().toString());
+    }
+  }, [showAddModal, data.sales]);
+
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const [selectedItems, setSelectedItems] = useState([]);
   const [tempForm, setTempForm] = useState({ stockId: '', qty: '', salePrice: '' });
   const [stockSearch, setStockSearch] = useState('');
@@ -181,8 +288,10 @@ export default function SalesTab({ data, saveData }) {
 
     const newSale = {
       id: Date.now().toString(),
+      invoiceNo: invoiceNoInput.trim() ? parseInt(invoiceNoInput, 10) : (data.sales || []).length + 1,
       date: new Date().toISOString(),
       customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone.trim() || undefined,
       items: itemsToSubmit,
       model: itemsToSubmit.length === 1 ? itemsToSubmit[0].model : joinedModels,
       qty: grandQty,
@@ -208,12 +317,7 @@ export default function SalesTab({ data, saveData }) {
     });
     
     setShowAddModal(false);
-    setSelectedItems([]);
-    setCustomerName('');
-    setAddForm({ cashAmount: '', onlineAmount: '', remarks: '' });
-    setTempForm({ stockId: '', qty: '', salePrice: '' });
-    setStockSearch('');
-    setIsDropdownOpen(false);
+    resetForm();
   };
 
   const deleteSale = async (sale) => {
@@ -243,9 +347,13 @@ export default function SalesTab({ data, saveData }) {
     let result = data.sales;
 
     if (filterType === 'Daily' && selectedDate) {
+      const diffDays = getDaysAgo(selectedDate);
       result = result.filter(s => {
         const d = new Date(s.date);
         const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (diffDays > 0) {
+          return ymd >= selectedDate && ymd <= todayYMD;
+        }
         return ymd === selectedDate;
       });
     } else if (filterType === 'Monthly' && selectedMonth) {
@@ -291,7 +399,7 @@ export default function SalesTab({ data, saveData }) {
     }
 
     return result;
-  }, [data.sales, data.stock, filterType, selectedDate, selectedMonth, selectedYear, searchQuery, selectedCategory, startDate, endDate, sortBy]);
+  }, [data.sales, data.stock, filterType, selectedDate, selectedMonth, selectedYear, searchQuery, selectedCategory, startDate, endDate, sortBy, todayYMD]);
 
   // Totals
   const totals = filteredSales.reduce((acc, sale) => {
@@ -307,9 +415,13 @@ export default function SalesTab({ data, saveData }) {
     let result = data.expenses;
 
     if (filterType === 'Daily' && selectedDate) {
+      const diffDays = getDaysAgo(selectedDate);
       result = result.filter(e => {
         const d = new Date(e.date);
         const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (diffDays > 0) {
+          return ymd >= selectedDate && ymd <= todayYMD;
+        }
         return ymd === selectedDate;
       });
     } else if (filterType === 'Monthly' && selectedMonth) {
@@ -332,7 +444,7 @@ export default function SalesTab({ data, saveData }) {
       });
     }
     return result.reduce((sum, e) => sum + Number(e.amount), 0);
-  }, [data.expenses, filterType, selectedDate, selectedMonth, selectedYear, startDate, endDate]);
+  }, [data.expenses, filterType, selectedDate, selectedMonth, selectedYear, startDate, endDate, todayYMD]);
 
   const netBalance = totals.sale - filteredExpenses;
 
@@ -358,12 +470,30 @@ export default function SalesTab({ data, saveData }) {
             </select>
 
             {filterType === 'Daily' && (
-              <input 
-                type="date" 
-                className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-              />
+              <>
+                <input 
+                  type="date" 
+                  className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  value={selectedDate}
+                  onChange={e => setSelectedDate(e.target.value)}
+                />
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                  <span className="text-xs font-semibold text-gray-600 uppercase">Days Ago:</span>
+                  <input 
+                    type="number" 
+                    min="0"
+                    placeholder="0"
+                    value={daysAgoInput} 
+                    onChange={handleDaysAgoChange}
+                    className="w-12 text-sm font-medium text-gray-800 outline-none bg-transparent"
+                  />
+                </div>
+                {getDaysAgo(selectedDate) > 0 && (
+                  <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 shadow-sm text-sm font-semibold">
+                    <span>Range: {formatReportDate(selectedDate)}</span>
+                  </div>
+                )}
+              </>
             )}
 
             {filterType === 'Monthly' && (
@@ -409,6 +539,7 @@ export default function SalesTab({ data, saveData }) {
                 onClick={() => {
                   setFilterType('Daily');
                   setSelectedDate(todayYMD);
+                  setDaysAgoInput('');
                 }}
                 className="text-gray-400 hover:text-red-500 hover:bg-gray-100 p-0.5 rounded-full transition ml-1"
                 title="Reset to today"
@@ -465,7 +596,7 @@ export default function SalesTab({ data, saveData }) {
         <table className="w-full text-left border-collapse print-table">
           <thead className="bg-slate-900 text-white sticky top-0 print-header shadow-sm text-sm uppercase tracking-wider">
             <tr>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-12">#</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-20">Inv No.</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Date</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Model</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Qty</th>
@@ -480,13 +611,13 @@ export default function SalesTab({ data, saveData }) {
           <tbody>
             {filteredSales.map((sale, index) => (
               <tr key={sale.id} className="hover:bg-slate-50 border-b border-gray-200 group">
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{getInvoiceNo(sale)}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-600 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
                   <div>{sale.model}</div>
-                  {sale.customerName && (
-                    <div className="text-[10px] text-slate-400 font-normal mt-0.5">
-                      Customer: {sale.customerName}
+                  {(sale.customerName || sale.customerPhone) && (
+                    <div className="text-[10px] text-slate-400 font-normal mt-0.5 font-sans">
+                      Customer: {sale.customerName || '-'}{sale.customerPhone ? ` (${sale.customerPhone})` : ''}
                     </div>
                   )}
                 </td>
@@ -557,13 +688,13 @@ export default function SalesTab({ data, saveData }) {
       </div>
 
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print-hidden" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print-hidden">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4 pb-2 border-b">
               <h2 className="text-xl font-bold text-gray-800">Record New Sale</h2>
               <button 
                 type="button" 
-                onClick={() => { setSelectedItems([]); setCustomerName(''); setAddForm({ cashAmount: '', onlineAmount: '', remarks: '' }); setTempForm({ stockId: '', qty: '', salePrice: '' }); setStockSearch(''); setIsDropdownOpen(false); }}
+                onClick={resetForm}
                 className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition"
                 title="Reset Fields"
               >
@@ -572,16 +703,48 @@ export default function SalesTab({ data, saveData }) {
             </div>
             
             <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
-              {/* Customer Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name (Optional)</label>
-                <input 
-                  type="text" 
-                  placeholder="Enter customer name..." 
-                  className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500" 
-                  value={customerName} 
-                  onChange={e => setCustomerName(e.target.value)} 
-                />
+              {/* Customer Details & Invoice No */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Customer Name (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter customer name..." 
+                    className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans" 
+                    value={customerName} 
+                    onChange={e => setCustomerName(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Customer Phone (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter customer phone..." 
+                    className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans" 
+                    value={customerPhone} 
+                    onChange={e => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Invoice #</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Invoice #" 
+                      className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans font-semibold" 
+                      value={invoiceNoInput} 
+                      onChange={e => setInvoiceNoInput(e.target.value.replace(/[^0-9]/g, ''))} 
+                    />
+                    <button
+                      type="button"
+                      onClick={refreshInvoiceNo}
+                      className="p-2 bg-gray-100 hover:bg-gray-250 text-gray-600 rounded transition duration-200 border border-gray-300 flex items-center justify-center cursor-pointer"
+                      title="Refresh Invoice No"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Add Item Sub-Form */}
@@ -589,8 +752,8 @@ export default function SalesTab({ data, saveData }) {
                 <h3 className="text-base font-bold text-gray-800 mb-3">Add Product Item</h3>
                 
                 <div className="flex flex-col gap-3">
-                  <div className="relative">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Model</label>
+                  <div className="relative" ref={dropdownRef}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Product Model</label>
                     <div 
                        className="w-full border border-gray-300 rounded p-2 bg-white cursor-pointer flex justify-between items-center"
                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -820,7 +983,7 @@ export default function SalesTab({ data, saveData }) {
               </div>
 
               <div className="flex gap-3 justify-end mt-4 pt-3 border-t">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition">Cancel</button>
+                <button type="button" onClick={() => { resetForm(); setShowAddModal(false); }} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition">Complete Sale</button>
               </div>
             </form>
@@ -857,7 +1020,8 @@ export default function SalesTab({ data, saveData }) {
                 <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                   <div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
-                    <p className="text-sm font-semibold text-gray-600">Sales Report ({filterLabel})</p>
+                    <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
+                    <p className="text-sm font-semibold text-gray-600 mt-1">Sales Report ({filterLabel})</p>
                   </div>
                   <div className="text-right text-xs text-gray-500">
                     <p>Date: {new Date().toLocaleDateString()}</p>
@@ -964,22 +1128,31 @@ export default function SalesTab({ data, saveData }) {
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                 <div>
                   <h1 className="text-3xl font-extrabold text-slate-900 tracking-wider">DUBAI ELECTRONICS</h1>
-                  <p className="text-sm font-semibold text-gray-500">Al-Noor Shopping Mall, Bahatar Morr Main G.T Road, Wah Cantt</p>
-                  <p className="text-sm text-gray-500">Phone: 051-4916830</p>
+                  <p className="text-sm font-semibold text-gray-500">{data.settings?.branchAddress || `${activeBranch} Branch`}</p>
+                  {data.settings?.branchPhone ? (
+                    <p className="text-sm text-gray-500">Phone: {data.settings.branchPhone}</p>
+                  ) : (
+                    activeBranch === 'Wah Cantt' ? (
+                      <p className="text-sm text-gray-500">Phone: 051-4916830</p>
+                    ) : null
+                  )}
                 </div>
                 <div className="text-right">
                   <h2 className="text-4xl font-extrabold text-blue-700 tracking-wider uppercase">INVOICE</h2>
                   <div className="text-right mt-3 text-xs text-gray-600 flex flex-col gap-0.5">
-                    <p><span className="font-semibold text-gray-800">Invoice No:</span> {receiptSale.id}</p>
+                    <p><span className="font-semibold text-gray-800">Invoice No:</span> {getInvoiceNo(receiptSale)}</p>
                     <p><span className="font-semibold text-gray-800">Date:</span> {new Date(receiptSale.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
                   </div>
                 </div>
               </div>
 
-              {receiptSale.customerName && (
-                <div className="bg-slate-50 border border-gray-200 rounded-lg p-4 mb-6">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Customer / Bill To</h3>
-                  <p className="text-sm font-bold text-gray-850">{receiptSale.customerName}</p>
+              {(receiptSale.customerName || receiptSale.customerPhone) && (
+                <div className="bg-slate-50 border border-gray-200 rounded-lg p-3 mb-6">
+                  <p className="text-sm font-sans text-gray-800">
+                    <span className="font-bold text-gray-850">Customer: </span>
+                    <span>{receiptSale.customerName || '-'}</span>
+                    {receiptSale.customerPhone && <span> - {receiptSale.customerPhone}</span>}
+                  </p>
                 </div>
               )}
 

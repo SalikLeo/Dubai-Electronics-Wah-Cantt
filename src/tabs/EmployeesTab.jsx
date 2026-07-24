@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Plus, Banknote, Trash2, History, X, Calendar, Edit2, Search, Printer } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
-export default function EmployeesTab({ data, saveData }) {
+export default function EmployeesTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
   const currentYM = useMemo(() => {
     const d = new Date();
@@ -652,7 +652,8 @@ export default function EmployeesTab({ data, saveData }) {
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                 <div>
                   <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
-                  <p className="text-sm font-semibold text-gray-600">Employees Payroll Report ({selectedMonth})</p>
+                  <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
+                  <p className="text-sm font-semibold text-gray-600 mt-1">Employees Payroll Report ({selectedMonth})</p>
                 </div>
                 <div className="text-right text-xs text-gray-500">
                   <p>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</p>

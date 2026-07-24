@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, NavLink, Navigate } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Receipt, Users, Settings, Bell, MapPin } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Receipt, Users, Settings, Bell, MapPin, History } from 'lucide-react';
 import { useDialog } from './components/DialogProvider.jsx';
 
 // Placeholder components for tabs
 import DashboardTab from './tabs/DashboardTab';
 import StockTab from './tabs/StockTab';
 import SalesTab from './tabs/SalesTab';
+import PurchasesTab from './tabs/PurchasesTab';
 import ExpensesTab from './tabs/ExpensesTab';
 import EmployeesTab from './tabs/EmployeesTab';
 import ReminderTab from './tabs/ReminderTab';
@@ -216,6 +217,7 @@ function App() {
     { name: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, path: '/dashboard' },
     { name: 'Stock', icon: <Package className="w-5 h-5" />, path: '/stock' },
     { name: 'Sales', icon: <ShoppingCart className="w-5 h-5" />, path: '/sales' },
+    { name: 'Purchases', icon: <History className="w-5 h-5" />, path: '/purchases' },
     { name: 'Expenses', icon: <Receipt className="w-5 h-5" />, path: '/expenses' },
     { name: 'Employees', icon: <Users className="w-5 h-5" />, path: '/employees' },
     { name: 'Reminder', icon: <Bell className="w-5 h-5" />, path: '/reminder' },
@@ -325,6 +327,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/stock" element={<StockTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/sales" element={<SalesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
+              <Route path="/purchases" element={<PurchasesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/expenses" element={<ExpensesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/employees" element={<EmployeesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/reminder" element={<ReminderTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />

@@ -12,6 +12,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
   const [newCategory, setNewCategory] = useState('');
   const [branchAddress, setBranchAddress] = useState(data.settings?.branchAddress || '');
   const [branchPhone, setBranchPhone] = useState(data.settings?.branchPhone || '');
+  const [lowStockLimit, setLowStockLimit] = useState(data.settings?.lowStockLimit !== undefined ? data.settings.lowStockLimit : 3);
   const fileInputRef = useRef(null);
   const dataInputRef = useRef(null);
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -23,6 +24,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
     setLocalCategories([...(data.categories || [])]);
     setBranchAddress(data.settings?.branchAddress || '');
     setBranchPhone(data.settings?.branchPhone || '');
+    setLowStockLimit(data.settings?.lowStockLimit !== undefined ? data.settings.lowStockLimit : 3);
   }, [data]);
 
   const handleAddCategory = () => {
@@ -138,7 +140,8 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
         ...data.settings, 
         password: finalPassword,
         branchAddress: branchAddress,
-        branchPhone: branchPhone
+        branchPhone: branchPhone,
+        lowStockLimit: Number(lowStockLimit || 0)
       }
     });
 
@@ -307,7 +310,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
             </div>
 
             {/* Branch Details */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-200/60">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-200/60">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Address</label>
                 <input 
@@ -329,6 +332,18 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                   onChange={e => setBranchPhone(e.target.value)}
                 />
                 <p className="text-[10px] text-gray-500 mt-1">Shown under the logo in the sidebar and printed on receipts.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Low Stock Limit (Threshold)</label>
+                <input 
+                  type="number" 
+                  min="0"
+                  placeholder="3" 
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                  value={lowStockLimit}
+                  onChange={e => setLowStockLimit(e.target.value)}
+                />
+                <p className="text-[10px] text-gray-500 mt-1">Stock balance below or equal to this value highlights items as low stock.</p>
               </div>
             </div>
 

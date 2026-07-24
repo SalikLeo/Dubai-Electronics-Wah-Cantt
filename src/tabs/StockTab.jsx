@@ -11,16 +11,6 @@ export default function StockTab({ data, saveData, activeBranch }) {
   const [isEditing, setIsEditing] = useState(null);
   const [editForm, setEditForm] = useState({});
 
-  useEffect(() => {
-    if (location.state?.openAddModal) {
-      setShowAddModal(true);
-      window.history.replaceState({}, document.title);
-    } else if (location.state?.openAddStockModal) {
-      setShowAddStockModal(true);
-      window.history.replaceState({}, document.title);
-    }
-  }, [location]);
-  
   const [tableSearch, setTableSearch] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
   const todayYMD = useMemo(() => {
@@ -88,12 +78,29 @@ export default function StockTab({ data, saveData, activeBranch }) {
   const [historyItem, setHistoryItem] = useState(null);
   const [historyFilter, setHistoryFilter] = useState('All');
   const [showGlobalHistory, setShowGlobalHistory] = useState(false);
-  const [globalHistoryFilter, setGlobalHistoryFilter] = useState('All');
+  const [globalHistoryFilter, setGlobalHistoryFilter] = useState('Today');
   const [purchaseHistoryItem, setPurchaseHistoryItem] = useState(null);
+  const [globalHistoryType, setGlobalHistoryType] = useState('sales');
+  const [globalHistorySort, setGlobalHistorySort] = useState('latest');
+  const [globalHistorySearch, setGlobalHistorySearch] = useState('');
   
   const [stockSearch, setStockSearch] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showPrintHistoryPreview, setShowPrintHistoryPreview] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.openAddModal) {
+      setShowAddModal(true);
+      window.history.replaceState({}, document.title);
+    } else if (location.state?.openAddStockModal) {
+      setShowAddStockModal(true);
+      if (location.state?.stockId) {
+        setAddStockForm(prev => ({ ...prev, stockId: location.state.stockId }));
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location, setAddStockForm]);
 
   const toggleCategory = (cat) => {
     setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
@@ -536,13 +543,92 @@ export default function StockTab({ data, saveData, activeBranch }) {
     }, 0);
   }, [data?.stock, itemsStockForSelectedDate]);
 
+  const filteredGlobalTransactions = useMemo(() => {
+    if (!showGlobalHistory) return [];
+
+    let allTx = purchaseHistoryItem
+      ? (data.history || []).filter(h => (h.type === 'Stock In' || h.type === 'Initial Stock' || h.type === 'Price Update') && h.stockId === purchaseHistoryItem.id)
+      : (globalHistoryType === 'purchases'
+          ? (data.history || []).filter(h => h.type === 'Stock In' || h.type === 'Initial Stock' || h.type === 'Price Update')
+          : (data.sales || []).map(s => ({
+              date: s.date,
+              stockId: s.stockId,
+              type: 'Sale',
+              qty: s.qty,
+              total: s.salePrice,
+              details: `Sale: Rs ${s.salePrice.toLocaleString('en-IN')}` + (s.cashAmount > 0 || s.onlineAmount > 0 ? ` (${[s.cashAmount > 0 ? `C: ${s.cashAmount.toLocaleString('en-IN')}` : null, s.onlineAmount > 0 ? `O: ${s.onlineAmount.toLocaleString('en-IN')}` : null].filter(Boolean).join(' + ')})` : '')
+            }))
+        );
+
+    const now = new Date();
+    if (globalHistoryFilter === 'Today') {
+      allTx = allTx.filter(t => new Date(t.date).toDateString() === now.toDateString());
+    } else if (globalHistoryFilter === '7 Days') {
+      const past = new Date(now.setDate(now.getDate() - 7));
+      allTx = allTx.filter(t => new Date(t.date) >= past);
+    } else if (globalHistoryFilter === '30 Days') {
+      const past = new Date(now.setDate(now.getDate() - 30));
+      allTx = allTx.filter(t => new Date(t.date) >= past);
+    }
+
+    if (globalHistorySearch.trim()) {
+      const q = globalHistorySearch.toLowerCase().trim();
+      allTx = allTx.filter(t => {
+        const stockItem = data.stock.find(s => s.id === t.stockId);
+        const itemName = stockItem ? stockItem.model.toLowerCase() : 'unknown item';
+        const details = (t.details || '').toLowerCase();
+        return itemName.includes(q) || details.includes(q);
+      });
+    }
+
+    allTx.forEach(tx => {
+      let totalAmt = 0;
+      if (tx.total !== undefined) {
+        totalAmt = tx.total;
+      } else if (tx.details && tx.details.includes('Cost: Rs ')) {
+        const match = tx.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
+        if (match) {
+          const unitCost = parseFloat(match[1].replace(/,/g, ''));
+          totalAmt = unitCost * tx.qty;
+        }
+      }
+      tx.calculatedTotal = totalAmt;
+    });
+
+    if (globalHistorySort === 'latest') {
+      allTx.sort((a, b) => new Date(b.date) - new Date(a.date));
+    } else if (globalHistorySort === 'oldest') {
+      allTx.sort((a, b) => new Date(a.date) - new Date(b.date));
+    } else if (globalHistorySort === 'qtyDesc') {
+      allTx.sort((a, b) => b.qty - a.qty);
+    } else if (globalHistorySort === 'qtyAsc') {
+      allTx.sort((a, b) => a.qty - b.qty);
+    } else if (globalHistorySort === 'amountDesc') {
+      allTx.sort((a, b) => b.calculatedTotal - a.calculatedTotal);
+    } else if (globalHistorySort === 'amountAsc') {
+      allTx.sort((a, b) => a.calculatedTotal - b.calculatedTotal);
+    }
+
+    return allTx;
+  }, [
+    showGlobalHistory,
+    purchaseHistoryItem,
+    data.history,
+    data.sales,
+    globalHistoryType,
+    globalHistoryFilter,
+    globalHistorySearch,
+    globalHistorySort,
+    data.stock
+  ]);
+
   return (
     <>
-      <div className={`h-full flex flex-col p-6 print-content ${showPrintPreview ? 'print-hidden' : ''}`}>
+      <div className={`h-full flex flex-col p-6 print-content ${(showPrintPreview || showPrintHistoryPreview) ? 'print-hidden' : ''}`}>
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Stock Management</h1>
-          <p className="text-gray-500">Manage your inventory and categories</p>
+          <h1 className="text-3xl font-bold text-gray-800">Stock</h1>
+          <p className="text-gray-500">Manage Stock Items</p>
         </div>
         <div className="flex gap-3 items-center">
           <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
@@ -580,9 +666,6 @@ export default function StockTab({ data, saveData, activeBranch }) {
               <span>Range: {formatReportDate(selectedDate)}</span>
             </div>
           )}
-          <button onClick={() => { setShowGlobalHistory(true); setPurchaseHistoryItem(null); setGlobalHistoryFilter('All'); }} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium shadow-sm transition">
-            <TrendingUp className="w-4 h-4" /> Sales History
-          </button>
           <button onClick={() => setShowAddStockModal(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium shadow-sm transition">
             <Plus className="w-4 h-4" /> Add Stock
           </button>
@@ -976,23 +1059,58 @@ export default function StockTab({ data, saveData, activeBranch }) {
       )}
 
       {showGlobalHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print-hidden" onClick={() => setShowGlobalHistory(false)}>
-          <div className={`bg-white rounded-xl shadow-2xl w-full ${purchaseHistoryItem ? 'max-w-4xl' : 'max-w-3xl'} p-6 flex flex-col max-h-[90vh]`} onClick={e => e.stopPropagation()}>
+        <div className={`fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print-hidden ${showPrintHistoryPreview ? 'hidden' : ''}`} onClick={() => setShowGlobalHistory(false)}>
+          <div className={`bg-white rounded-xl shadow-2xl w-full ${purchaseHistoryItem ? 'max-w-6xl' : 'max-w-5xl'} p-6 flex flex-col max-h-[90vh]`} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800">
-                {purchaseHistoryItem ? `Purchase History: ${purchaseHistoryItem.model}` : "Global Sales History"}
+                {purchaseHistoryItem ? `Purchase History: ${purchaseHistoryItem.model}` : (globalHistoryType === 'purchases' ? "Global Purchase History" : "Global Sales History")}
               </h2>
-              <button onClick={() => setShowGlobalHistory(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition">
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setShowPrintHistoryPreview(true)} 
+                  className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3.5 py-1.5 rounded-lg flex items-center gap-2 text-xs font-bold font-sans shadow-sm transition cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Print
+                </button>
+                <button onClick={() => setShowGlobalHistory(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             
-            <div className="flex gap-2 mb-4">
-              {['All', 'Today', '7 Days', '30 Days'].map(f => (
-                <button key={f} onClick={() => setGlobalHistoryFilter(f)} className={`px-3 py-1 rounded-full text-xs font-semibold transition ${globalHistoryFilter === f ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                  {f}
-                </button>
-              ))}
+            <div className="flex justify-between items-center mb-4 gap-4 bg-gray-50 border border-gray-200 rounded-xl p-3 shadow-sm">
+              <div className="flex gap-2">
+                {['All', 'Today', '7 Days', '30 Days'].map(f => (
+                  <button key={f} onClick={() => setGlobalHistoryFilter(f)} className={`px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ${globalHistoryFilter === f ? 'bg-indigo-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 max-w-md relative">
+                <input 
+                  type="text" 
+                  value={globalHistorySearch} 
+                  onChange={e => setGlobalHistorySearch(e.target.value)} 
+                  placeholder="Search by item model or details..." 
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-750 placeholder-gray-400 outline-none focus:border-indigo-500 shadow-sm transition"
+                />
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500 font-sans uppercase">Sort By:</span>
+                <select 
+                  value={globalHistorySort} 
+                  onChange={e => setGlobalHistorySort(e.target.value)} 
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-650 outline-none cursor-pointer shadow-sm hover:border-gray-400 transition"
+                >
+                  <option value="latest">Latest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="qtyDesc">Quantity: High to Low</option>
+                  <option value="qtyAsc">Quantity: Low to High</option>
+                  <option value="amountDesc">Amount: High to Low</option>
+                  <option value="amountAsc">Amount: Low to High</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex-1 overflow-auto border rounded bg-gray-50 p-0">
@@ -1002,7 +1120,9 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     <th className="py-2 px-2 font-semibold border-r border-slate-700 text-center w-8">#</th>
                     <th className="py-2 px-2 font-semibold border-r border-slate-700">Date & Time</th>
                     {!purchaseHistoryItem && <th className="py-2 px-2 font-semibold border-r border-slate-700">Item</th>}
-                    <th className="py-2 px-2 font-semibold border-r border-slate-700 text-center">Qty Added</th>
+                    <th className="py-2 px-2 font-semibold border-r border-slate-700 text-center">
+                      {purchaseHistoryItem || globalHistoryType === 'purchases' ? 'Qty Added' : 'Qty Sold'}
+                    </th>
                     {purchaseHistoryItem && <th className="py-2 px-2 font-semibold border-r border-slate-700 text-right">Prev Price</th>}
                     {purchaseHistoryItem && <th className="py-2 px-2 font-semibold border-r border-slate-700 text-right">New Price</th>}
                     <th className="py-2 px-2 font-semibold border-r border-slate-700 text-right">Total Amount</th>
@@ -1012,29 +1132,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {(() => {
-                    let allTx = purchaseHistoryItem
-                      ? (data.history || []).filter(h => (h.type === 'Stock In' || h.type === 'Initial Stock' || h.type === 'Price Update') && h.stockId === purchaseHistoryItem.id)
-                      : (data.sales || []).map(s => ({
-                          date: s.date,
-                          stockId: s.stockId,
-                          type: 'Sale',
-                          qty: s.qty,
-                          total: s.salePrice,
-                          details: `Sale: Rs ${s.salePrice.toLocaleString('en-IN')}` + (s.cashAmount > 0 || s.onlineAmount > 0 ? ` (${[s.cashAmount > 0 ? `C: ${s.cashAmount.toLocaleString('en-IN')}` : null, s.onlineAmount > 0 ? `O: ${s.onlineAmount.toLocaleString('en-IN')}` : null].filter(Boolean).join(' + ')})` : '')
-                        }));
-                    
-                    allTx.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    
-                    const now = new Date();
-                    if (globalHistoryFilter === 'Today') {
-                      allTx = allTx.filter(t => new Date(t.date).toDateString() === now.toDateString());
-                    } else if (globalHistoryFilter === '7 Days') {
-                      const past = new Date(now.setDate(now.getDate() - 7));
-                      allTx = allTx.filter(t => new Date(t.date) >= past);
-                    } else if (globalHistoryFilter === '30 Days') {
-                      const past = new Date(now.setDate(now.getDate() - 30));
-                      allTx = allTx.filter(t => new Date(t.date) >= past);
-                    }
+                    const allTx = filteredGlobalTransactions;
 
                     if (allTx.length === 0) {
                       return <tr><td colSpan={purchaseHistoryItem ? 8 : 6} className="py-4 text-center text-gray-500">No transactions found.</td></tr>;
@@ -1044,16 +1142,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                       const stockItem = data.stock.find(s => s.id === tx.stockId);
                       const itemName = stockItem ? stockItem.model : 'Unknown Item';
 
-                      let totalAmt = 0;
-                      if (tx.total !== undefined) {
-                        totalAmt = tx.total;
-                      } else if (tx.details && tx.details.includes('Cost: Rs ')) {
-                        const match = tx.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
-                        if (match) {
-                          const unitCost = parseFloat(match[1].replace(/,/g, ''));
-                          totalAmt = unitCost * tx.qty;
-                        }
-                      }
+                      const totalAmt = tx.calculatedTotal;
 
                       const prevNtd = tx.prevNtd !== undefined ? tx.prevNtd : (chronologicalPrices[tx.id]?.prevNtd ?? 0);
                       const newNtd = tx.newNtd !== undefined ? tx.newNtd : (chronologicalPrices[tx.id]?.newNtd ?? 0);
@@ -1211,6 +1300,102 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     Rs {globalTotalValue.toLocaleString('en-IN')}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* History Print Preview Modal */}
+      {showPrintHistoryPreview && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center p-4 print:static print:block print:p-0 print:bg-white" onClick={() => setShowPrintHistoryPreview(false)}>
+          <div className="bg-slate-900 text-white rounded-t-xl w-full max-w-4xl px-6 py-3 flex justify-between items-center shadow-lg print-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <Printer className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-bold">
+                Print Preview - {purchaseHistoryItem ? `Purchase History: ${purchaseHistoryItem.model}` : (globalHistoryType === 'purchases' ? "Global Purchase History" : "Global Sales History")}
+              </h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => window.print()} 
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg flex items-center gap-2 font-medium text-sm transition"
+              >
+                <Printer className="w-4 h-4" /> Print Now
+              </button>
+              <button 
+                onClick={() => setShowPrintHistoryPreview(false)} 
+                className="text-slate-400 hover:bg-slate-800 p-1.5 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 w-full max-w-4xl flex-1 overflow-auto p-6 rounded-b-xl flex justify-center items-start print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
+            <div className="bg-white text-black p-8 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area">
+              <div>
+                <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
+                    <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
+                    <p className="text-sm font-semibold text-gray-600 mt-1">
+                      {purchaseHistoryItem ? `Purchase History Report: ${purchaseHistoryItem.model}` : (globalHistoryType === 'purchases' ? "Global Purchase History Report" : "Global Sales History Report")}
+                    </p>
+                    {data.settings?.branchAddress && <p className="text-[10px] text-gray-500 mt-0.5">{data.settings.branchAddress}</p>}
+                  </div>
+                  <div className="text-right text-xs text-gray-500">
+                    <p>Time Filter: {globalHistoryFilter}</p>
+                    {globalHistorySearch.trim() && <p>Search Query: "{globalHistorySearch}"</p>}
+                    <p>Total Records: {filteredGlobalTransactions.length}</p>
+                  </div>
+                </div>
+
+                <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6 font-sans">
+                  <thead>
+                    <tr className="bg-slate-800 text-white border-b border-gray-300">
+                      <th className="py-2 px-2 border-r border-slate-700 text-center w-8">#</th>
+                      <th className="py-2 px-2 border-r border-slate-700">Date & Time</th>
+                      {!purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700">Item</th>}
+                      <th className="py-2 px-2 border-r border-slate-700 text-center">
+                        {purchaseHistoryItem || globalHistoryType === 'purchases' ? 'Qty Added' : 'Qty Sold'}
+                      </th>
+                      {purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700 text-right">Prev Price</th>}
+                      {purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700 text-right">New Price</th>}
+                      <th className="py-2 px-2 border-r border-slate-700 text-right">Total Amount</th>
+                      <th className="py-2 px-2">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-300 border-b border-gray-300">
+                    {filteredGlobalTransactions.map((tx, i) => {
+                      const stockItem = data.stock.find(s => s.id === tx.stockId);
+                      const itemName = stockItem ? stockItem.model : 'Unknown Item';
+                      const totalAmt = tx.calculatedTotal;
+                      const prevNtd = tx.prevNtd !== undefined ? tx.prevNtd : (chronologicalPrices[tx.id]?.prevNtd ?? 0);
+                      const newNtd = tx.newNtd !== undefined ? tx.newNtd : (chronologicalPrices[tx.id]?.newNtd ?? 0);
+
+                      return (
+                        <tr key={i} className="hover:bg-gray-100 transition-colors">
+                          <td className="py-1 px-2 border-r border-gray-300 text-center font-semibold text-gray-500">{i + 1}</td>
+                          <td className="py-1 px-2 border-r border-gray-300 whitespace-nowrap text-gray-600">{new Date(tx.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                          {!purchaseHistoryItem && <td className="py-1 px-2 border-r border-gray-300 font-bold text-gray-800">{itemName}</td>}
+                          <td className="py-1 px-2 border-r border-gray-300 text-center font-bold text-gray-700">{tx.qty}</td>
+                          {purchaseHistoryItem && (
+                            <td className="py-1 px-2 border-r border-gray-300 text-right font-semibold text-gray-650">
+                              {prevNtd > 0 ? `Rs ${prevNtd.toLocaleString('en-IN')}` : '-'}
+                            </td>
+                          )}
+                          {purchaseHistoryItem && (
+                            <td className="py-1 px-2 border-r border-gray-300 text-right font-bold text-slate-800">
+                              Rs {newNtd.toLocaleString('en-IN')}
+                            </td>
+                          )}
+                          <td className="py-1 px-2 border-r border-gray-300 text-right font-bold text-gray-800">Rs {totalAmt.toLocaleString('en-IN')}</td>
+                          <td className="py-1 px-2 text-gray-600 text-[11px] leading-snug">{tx.details}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

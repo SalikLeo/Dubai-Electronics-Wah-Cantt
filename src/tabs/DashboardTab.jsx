@@ -6,7 +6,9 @@ import {
   ShoppingCart, 
   TrendingDown, 
   Plus, 
-  Activity 
+  Activity,
+  AlertTriangle,
+  Bell
 } from 'lucide-react';
 
 export default function DashboardTab({ data, saveData }) {
@@ -14,6 +16,7 @@ export default function DashboardTab({ data, saveData }) {
   const [showSales, setShowSales] = useState(false);
   const [showExpenses, setShowExpenses] = useState(false);
   const [showReminders, setShowReminders] = useState(false);
+  const [showLowStock, setShowLowStock] = useState(false);
 
   // Date helpers
   const todayYMD = useMemo(() => {
@@ -27,6 +30,95 @@ export default function DashboardTab({ data, saveData }) {
     if (isNaN(d.getTime())) return '';
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
+
+  // Pre-process history and sales grouped by stockId and with pre-formatted date YMDs
+  const processedStockData = useMemo(() => {
+    const getYMDLocal = (dateString) => {
+      if (!dateString) return '';
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const stockInMap = {};
+    (data.history || []).forEach(h => {
+      if (h.type === 'Stock In') {
+        const id = h.stockId;
+        if (!stockInMap[id]) stockInMap[id] = [];
+        stockInMap[id].push({
+          qty: Number(h.qty || 0),
+          ymd: getYMDLocal(h.date)
+        });
+      }
+    });
+
+    const salesMap = {};
+    (data.sales || []).forEach(s => {
+      const id = s.stockId;
+      if (!salesMap[id]) salesMap[id] = [];
+      salesMap[id].push({
+        qty: Number(s.qty || 0),
+        ymd: getYMDLocal(s.date)
+      });
+    });
+
+    return { stockInMap, salesMap };
+  }, [data.history, data.sales]);
+
+  // Pre-calculate stock levels for todayYMD
+  const itemsStockForToday = useMemo(() => {
+    const { stockInMap, salesMap } = processedStockData;
+    const stockMap = {};
+
+    (data?.stock || []).forEach(item => {
+      const stockInHistory = stockInMap[item.id] || [];
+      const salesHistory = salesMap[item.id] || [];
+
+      let inBefore = 0;
+      let inOnDate = 0;
+      for (let i = 0; i < stockInHistory.length; i++) {
+        const h = stockInHistory[i];
+        if (h.ymd < todayYMD) {
+          inBefore += h.qty;
+        } else if (h.ymd === todayYMD) {
+          inOnDate += h.qty;
+        }
+      }
+
+      let saleBefore = 0;
+      let saleOnDate = 0;
+      for (let i = 0; i < salesHistory.length; i++) {
+        const s = salesHistory[i];
+        if (s.ymd < todayYMD) {
+          saleBefore += s.qty;
+        } else if (s.ymd === todayYMD) {
+          saleOnDate += s.qty;
+        }
+      }
+
+      const baseXB = Number(item.x_b || 0);
+      const x_b = Math.max(0, baseXB + inBefore - saleBefore);
+      const inQty = inOnDate;
+      const tb = x_b + inQty;
+      const saleQty = saleOnDate;
+      const blnc = tb - saleQty;
+
+      stockMap[item.id] = { x_b, in: inQty, tb, sale: saleQty, blnc };
+    });
+
+    return stockMap;
+  }, [data?.stock, processedStockData, todayYMD]);
+
+  const lowStockLimit = data.settings?.lowStockLimit !== undefined ? Number(data.settings.lowStockLimit) : 3;
+
+  const lowStockItems = useMemo(() => {
+    return (data.stock || [])
+      .map(item => ({
+        ...item,
+        blnc: itemsStockForToday[item.id]?.blnc ?? 0
+      }))
+      .filter(item => item.blnc <= lowStockLimit);
+  }, [data.stock, itemsStockForToday, lowStockLimit]);
 
   return (
     <div className="h-full flex flex-col p-6 overflow-auto font-sans">
@@ -96,10 +188,70 @@ export default function DashboardTab({ data, saveData }) {
         </div>
       </div>
 
-      {/* Recent Transactions List */}
-      <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 ${showSales ? 'flex-1 min-h-[300px]' : ''}`}>
+      {/* Low Stock Items List */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Sales History</h3>
+          <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-red-500" /> Low Stock Items List
+            {lowStockItems.length > 0 && (
+              <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold animate-pulse">
+                {lowStockItems.length} Alerts
+              </span>
+            )}
+          </h3>
+          <button 
+            onClick={() => setShowLowStock(!showLowStock)} 
+            className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-650 hover:text-red-700 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
+          >
+            {showLowStock ? 'Hide Items' : 'Show Items'}
+          </button>
+        </div>
+        {showLowStock && (
+          <div className="mt-4">
+            {lowStockItems.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-gray-400 text-sm py-4">
+                All items have healthy stock levels! (Threshold limit: {lowStockLimit})
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse border border-gray-200 rounded-lg overflow-hidden font-sans">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Model</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0">Category</th>
+                    <th className="py-2.5 px-3 border-r border-slate-200 last:border-r-0 text-center w-36">Current Stock</th>
+                    <th className="py-2.5 px-3 pl-4 last:border-r-0 text-center w-40">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 text-sm">
+                  {lowStockItems.map((item) => (
+                    <tr key={item.id} className="hover:bg-red-50/10">
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 font-medium text-gray-800">{item.model}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-gray-600">{item.category}</td>
+                      <td className="py-2.5 px-3 border-r border-slate-100 last:border-r-0 text-center font-bold text-red-650">{item.blnc}</td>
+                      <td className="py-2.5 px-3 pl-4 text-center last:border-r-0">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          item.blnc === 0 
+                            ? 'bg-red-100 text-red-700' 
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {item.blnc === 0 ? 'Out of Stock' : 'Low Stock'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Recent Transactions List */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-indigo-600" /> Recent Sales History
+          </h3>
           <button 
             onClick={() => setShowSales(!showSales)} 
             className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-700 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
@@ -108,7 +260,7 @@ export default function DashboardTab({ data, saveData }) {
           </button>
         </div>
         {showSales && (
-          <div className="flex-1 overflow-auto">
+          <div className="mt-4">
             {data.sales?.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-400 text-sm">
                 No sales logged yet.
@@ -152,9 +304,11 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Recent Expenses History */}
-      <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 mt-6 ${showExpenses ? 'flex-1 min-h-[300px]' : ''}`}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mt-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Expenses History</h3>
+          <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
+            <TrendingDown className="w-5 h-5 text-red-600" /> Recent Expenses History
+          </h3>
           <button 
             onClick={() => setShowExpenses(!showExpenses)} 
             className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
@@ -163,7 +317,7 @@ export default function DashboardTab({ data, saveData }) {
           </button>
         </div>
         {showExpenses && (
-          <div className="flex-1 overflow-auto">
+          <div className="mt-4">
             {data.expenses?.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-400 text-sm">
                 No expenses logged yet.
@@ -197,9 +351,11 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Recent Reminders */}
-      <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col transition-all duration-300 mt-6 ${showReminders ? 'flex-1 min-h-[300px]' : ''}`}>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mt-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-bold text-gray-800 font-sans">Recent Reminders</h3>
+          <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
+            <Bell className="w-5 h-5 text-amber-500" /> Recent Reminders
+          </h3>
           <button 
             onClick={() => setShowReminders(!showReminders)} 
             className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 hover:text-amber-800 text-xs font-bold font-sans rounded-lg transition-colors duration-200 cursor-pointer"
@@ -208,7 +364,7 @@ export default function DashboardTab({ data, saveData }) {
           </button>
         </div>
         {showReminders && (
-          <div className="flex-1 overflow-auto">
+          <div className="mt-4">
             {data.reminders?.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-400 text-sm">
                 No stock reminders logged yet.

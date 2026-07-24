@@ -462,8 +462,8 @@ export default function SalesTab({ data, saveData, activeBranch }) {
               className="border border-gray-300 rounded-lg px-3 py-2 bg-white font-medium text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500"
               value={filterType} onChange={e => setFilterType(e.target.value)}
             >
-              <option value="Monthly">Monthly</option>
               <option value="Daily">Daily</option>
+              <option value="Monthly">Monthly</option>
               <option value="Annual">Annual</option>
               <option value="Custom">Custom Range</option>
               <option value="All Time">All Time</option>

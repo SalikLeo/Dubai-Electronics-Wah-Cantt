@@ -283,17 +283,17 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
 
   return (
     <div className="h-full flex flex-col p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Settings</h1>
-        <p className="text-gray-500">Configure app behavior and backup data</p>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
+        <p className="text-gray-500 text-sm">Configure app behavior and backup data</p>
       </div>
 
-      <div className="max-w-3xl flex flex-col gap-6">
+      <div className="max-w-3xl flex flex-col gap-4">
         
         {/* App Configuration */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Settings className="w-5 h-5"/> App Configuration</h2>
-          <div className="grid gap-6">
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><Settings className="w-5 h-5"/> App Configuration</h2>
+          <div className="grid gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">App Icon</label>
               <div className="flex items-center gap-4">
@@ -310,7 +310,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
             </div>
 
             {/* Branch Details */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-200/60">
+            <div className="flex flex-col gap-3 bg-slate-50/50 p-3 rounded-xl border border-slate-200/60">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Address</label>
                 <input 
@@ -322,28 +322,30 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                 />
                 <p className="text-[10px] text-gray-500 mt-1">Printed at the top of customer sale invoices/receipts.</p>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Phone / Contact</label>
-                <input 
-                  type="text" 
-                  placeholder={`Enter Phone for ${activeBranch} Branch`} 
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
-                  value={branchPhone}
-                  onChange={e => setBranchPhone(e.target.value)}
-                />
-                <p className="text-[10px] text-gray-500 mt-1">Shown under the logo in the sidebar and printed on receipts.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Low Stock Limit (Threshold)</label>
-                <input 
-                  type="number" 
-                  min="0"
-                  placeholder="3" 
-                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
-                  value={lowStockLimit}
-                  onChange={e => setLowStockLimit(e.target.value)}
-                />
-                <p className="text-[10px] text-gray-500 mt-1">Stock balance below or equal to this value highlights items as low stock.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Branch Phone / Contact</label>
+                  <input 
+                    type="text" 
+                    placeholder={`Enter Phone for ${activeBranch} Branch`} 
+                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    value={branchPhone}
+                    onChange={e => setBranchPhone(e.target.value)}
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Shown under the logo in the sidebar and printed on receipts.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Low Stock Limit (Threshold)</label>
+                  <input 
+                    type="number" 
+                    min="0"
+                    placeholder="3" 
+                    className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    value={lowStockLimit}
+                    onChange={e => setLowStockLimit(e.target.value)}
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">Stock balance below or equal to this value highlights items as low stock.</p>
+                </div>
               </div>
             </div>
 
@@ -358,8 +360,8 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
               <p className="text-xs text-gray-500 mt-2">Used for grouping in the Stock Tab.</p>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-              <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-600"/> App Lock Password Settings</h3>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2"><Lock className="w-4 h-4 text-slate-600"/> App Lock Password Settings</h3>
               
               {data.settings?.password ? (
                 <div className="grid gap-3">
@@ -435,9 +437,9 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
         </div>
 
         {/* Data Management */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-xl font-bold mb-4">Data Management</h2>
-          <p className="text-gray-600 text-sm mb-6">Since this app runs entirely offline, it's crucial to backup your data regularly. Download a copy and keep it somewhere safe (like a USB drive).</p>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-bold mb-3">Data Management</h2>
+          <p className="text-gray-600 text-sm mb-4">Since this app runs entirely offline, it's crucial to backup your data regularly. Download a copy and keep it somewhere safe (like a USB drive).</p>
           
           <div className="flex gap-4">
             <button onClick={backupData} className="flex-1 bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 py-3 rounded-lg flex justify-center items-center gap-2 font-semibold transition">
@@ -510,15 +512,15 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                       onDragStart={(e) => handleDragStart(e, i)}
                       onDragOver={(e) => handleDragOver(e, i)}
                       onDragEnd={handleDragEnd}
-                      className={`flex justify-between items-center bg-white border border-gray-200 p-2 rounded shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 ${draggedIndex === i ? 'opacity-40 bg-blue-50 border-blue-300 scale-[0.98]' : ''}`}
+                      className={`flex justify-between items-center bg-white border border-gray-200 py-1 px-2 rounded shadow-sm cursor-grab active:cursor-grabbing transition-all duration-150 ${draggedIndex === i ? 'opacity-40 bg-blue-50 border-blue-300 scale-[0.98]' : ''}`}
                     >
                       <div className="flex items-center gap-2">
                         <GripVertical className="w-4 h-4 text-gray-400 shrink-0 select-none" />
-                        <div className="flex flex-col">
+                        <div className="flex flex-col -space-y-0.5">
                           <button 
                             disabled={i === 0}
                             onClick={() => moveCategoryUp(i)}
-                            className={`p-0.5 rounded hover:bg-gray-100 ${i === 0 ? 'text-gray-200 cursor-not-allowed opacity-30' : 'text-gray-500 hover:text-blue-600'}`}
+                            className={`p-[1px] rounded hover:bg-gray-100 ${i === 0 ? 'text-gray-200 cursor-not-allowed opacity-30' : 'text-gray-500 hover:text-blue-600'}`}
                             title="Move Up"
                           >
                             <ChevronUp className="w-3.5 h-3.5" />
@@ -526,7 +528,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                           <button 
                             disabled={i === localCategories.length - 1}
                             onClick={() => moveCategoryDown(i)}
-                            className={`p-0.5 rounded hover:bg-gray-100 ${i === localCategories.length - 1 ? 'text-gray-200 cursor-not-allowed opacity-30' : 'text-gray-500 hover:text-blue-600'}`}
+                            className={`p-[1px] rounded hover:bg-gray-100 ${i === localCategories.length - 1 ? 'text-gray-200 cursor-not-allowed opacity-30' : 'text-gray-500 hover:text-blue-600'}`}
                             title="Move Down"
                           >
                             <ChevronDown className="w-3.5 h-3.5" />

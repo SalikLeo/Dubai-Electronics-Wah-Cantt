@@ -3,6 +3,14 @@ import { useLocation } from 'react-router-dom';
 import { Search, Calendar, Plus, Edit2, Trash2, Printer, ChevronDown, ChevronRight, Check, X, RefreshCw, History, ClipboardList, ShoppingCart, PlusCircle, TrendingUp } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
+const formatIndianNumber = (val) => {
+  if (val === undefined || val === null || val === '') return '';
+  const numStr = String(val).replace(/,/g, '');
+  const num = Number(numStr);
+  if (isNaN(num)) return '';
+  return num.toLocaleString('en-IN');
+};
+
 export default function StockTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
   const location = useLocation();
@@ -13,12 +21,54 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
   const [tableSearch, setTableSearch] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+  const [sortBy, setSortBy] = useState('latest');
   const todayYMD = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
+  const currentYM = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  const [filterType, setFilterType] = useState('Daily');
   const [selectedDate, setSelectedDate] = useState(todayYMD);
+  const [selectedMonth, setSelectedMonth] = useState(currentYM);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [startDate, setStartDate] = useState(todayYMD);
+  const [endDate, setEndDate] = useState(todayYMD);
+
+  const getTransactionDate = () => {
+    const now = new Date();
+    let targetYMD = todayYMD;
+
+    if (filterType === 'Daily') {
+      targetYMD = selectedDate;
+    } else if (filterType === 'Monthly') {
+      if (selectedMonth === currentYM) {
+        targetYMD = todayYMD;
+      } else {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        targetYMD = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+    } else if (filterType === 'Custom') {
+      targetYMD = endDate;
+    } else if (filterType === 'Annual') {
+      const y = Number(selectedYear);
+      const currY = now.getFullYear();
+      if (y === currY) {
+        targetYMD = todayYMD;
+      } else {
+        targetYMD = `${y}-12-31`;
+      }
+    }
+
+    const [y, m, d] = targetYMD.split('-').map(Number);
+    return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).toISOString();
+  };
+
   const [daysAgoInput, setDaysAgoInput] = useState('');
 
   const getDaysAgo = useCallback((dateStr) => {
@@ -71,6 +121,14 @@ export default function StockTab({ data, saveData, activeBranch }) {
     return formatDateDMY(dateYMD);
   };
 
+  const filterLabel = useMemo(() => {
+    if (filterType === 'Daily') return `Daily (${formatReportDate(selectedDate)})`;
+    if (filterType === 'Monthly') return `Monthly (${selectedMonth})`;
+    if (filterType === 'Annual') return `Annual (${selectedYear})`;
+    if (filterType === 'Custom') return `Custom (${startDate} to ${endDate})`;
+    return 'All Time';
+  }, [filterType, selectedDate, selectedMonth, selectedYear, startDate, endDate]);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({ model: '', category: data.categories[0] || '', x_b: '', in: '', sale: '', ntd: '' });
   const [showAddStockModal, setShowAddStockModal] = useState(false);
@@ -96,11 +154,16 @@ export default function StockTab({ data, saveData, activeBranch }) {
     } else if (location.state?.openAddStockModal) {
       setShowAddStockModal(true);
       if (location.state?.stockId) {
-        setAddStockForm(prev => ({ ...prev, stockId: location.state.stockId }));
+        const s = data.stock.find(item => item.id === location.state.stockId);
+        setAddStockForm(prev => ({ 
+          ...prev, 
+          stockId: location.state.stockId,
+          ntd: s ? String(s.ntd || 0) : ''
+        }));
       }
       window.history.replaceState({}, document.title);
     }
-  }, [location, setAddStockForm]);
+  }, [location, data.stock, setAddStockForm]);
 
   const toggleCategory = (cat) => {
     setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
@@ -121,9 +184,11 @@ export default function StockTab({ data, saveData, activeBranch }) {
       sale: Number(addForm.sale || 0),
       ntd: Number(addForm.ntd || 0),
     };
+    const txDateIso = getTransactionDate();
+
     const newTx = {
       id: Date.now().toString() + '1',
-      date: new Date().toISOString(),
+      date: txDateIso,
       stockId: newItem.id,
       type: 'Initial Stock',
       qty: newItem.x_b + newItem.in,
@@ -150,8 +215,10 @@ export default function StockTab({ data, saveData, activeBranch }) {
     const addedNtd = Number(addStockForm.ntd || 0);
     
     const currentNtd = stockItem.ntd || 0;
-
-    let newNtd = currentNtd === 0 ? addedNtd : (currentNtd + addedNtd) / 2;
+    const currentBalance = Math.max(0, (stockItem.x_b || 0) + (stockItem.in || 0) - (stockItem.sale || 0));
+    let newNtd = currentNtd === 0 || currentBalance <= 0
+      ? addedNtd
+      : ((currentBalance * currentNtd) + (addedQty * addedNtd)) / (currentBalance + addedQty);
 
     const updatedStock = data.stock.map(item => 
       item.id === stockItem.id ? { 
@@ -161,9 +228,11 @@ export default function StockTab({ data, saveData, activeBranch }) {
       } : item
     );
 
+    const txDateIso = getTransactionDate();
+
     const newTx = {
       id: Date.now().toString(),
-      date: new Date().toISOString(),
+      date: txDateIso,
       stockId: stockItem.id,
       type: 'Stock In',
       qty: addedQty,
@@ -200,10 +269,12 @@ export default function StockTab({ data, saveData, activeBranch }) {
       const confirmed = await confirm(`Are you sure you want to update the price of this item from Rs ${prevNtd.toLocaleString('en-IN')} to Rs ${newNtd.toLocaleString('en-IN')}?`);
       if (!confirmed) return;
 
+      const txDateIso = getTransactionDate();
+
       // Add Price Update transaction
       const newTx = {
         id: Date.now().toString(),
-        date: new Date().toISOString(),
+        date: txDateIso,
         stockId: stockItem.id,
         type: 'Price Update',
         qty: 0,
@@ -252,11 +323,29 @@ export default function StockTab({ data, saveData, activeBranch }) {
         
         // Recalculate 'ntd' (Cost price)
         const remainingItemHistory = updatedHistory.filter(h => h.stockId === tx.stockId);
-        const itemSales = (data.sales || []).filter(s => s.stockId === tx.stockId);
-        
+        const itemSales = (data.sales || []).filter(s => {
+          if (s.items && s.items.length > 0) {
+            return s.items.some(si => si.stockId === tx.stockId);
+          }
+          return s.stockId === tx.stockId;
+        });
+
+        const mappedSales = [];
+        itemSales.forEach(s => {
+          const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+          const matchedItem = items.find(si => si.stockId === tx.stockId);
+          if (matchedItem) {
+            mappedSales.push({
+              ...s,
+              qty: Number(matchedItem.qty || 0),
+              eventType: 'sale'
+            });
+          }
+        });
+
         const allEvents = [
           ...remainingItemHistory.map(h => ({ ...h, eventType: 'history' })),
-          ...itemSales.map(s => ({ ...s, eventType: 'sale' }))
+          ...mappedSales
         ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let runningNtd = 0;
@@ -280,7 +369,9 @@ export default function StockTab({ data, saveData, activeBranch }) {
               if (match) {
                 addedNtd = parseFloat(match[1].replace(/,/g, ''));
               }
-              runningNtd = runningNtd === 0 ? addedNtd : (runningNtd + addedNtd) / 2;
+              runningNtd = (runningNtd === 0 || runningBlnc <= 0)
+                ? addedNtd
+                : ((runningBlnc * runningNtd) + (event.qty * addedNtd)) / (runningBlnc + event.qty);
               runningBlnc += event.qty;
             } else if (event.type === 'Price Update') {
               let addedNtd = 0;
@@ -344,11 +435,15 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
     const salesMap = {};
     (data.sales || []).forEach(s => {
-      const id = s.stockId;
-      if (!salesMap[id]) salesMap[id] = [];
-      salesMap[id].push({
-        qty: Number(s.qty || 0),
-        ymd: getYMD(s.date)
+      const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+      items.forEach(item => {
+        const id = item.stockId;
+        if (!id) return;
+        if (!salesMap[id]) salesMap[id] = [];
+        salesMap[id].push({
+          qty: Number(item.qty || 0),
+          ymd: getYMD(s.date)
+        });
       });
     });
 
@@ -358,7 +453,32 @@ export default function StockTab({ data, saveData, activeBranch }) {
   // Pre-calculate stock levels for the selectedDate to avoid repeating loops for each render call
   const itemsStockForSelectedDate = useMemo(() => {
     const { stockInMap, salesMap } = processedStockData;
-    const diffDays = getDaysAgo(selectedDate);
+    let rangeStart = null;
+    let rangeEnd = null;
+
+    if (filterType === 'Daily') {
+      const diffDays = getDaysAgo(selectedDate);
+      if (diffDays > 0) {
+        rangeStart = selectedDate;
+        rangeEnd = todayYMD;
+      } else {
+        rangeStart = selectedDate;
+        rangeEnd = selectedDate;
+      }
+    } else if (filterType === 'Monthly') {
+      const [y, m] = selectedMonth.split('-').map(Number);
+      const lastDay = new Date(y, m, 0).getDate();
+      rangeStart = `${y}-${String(m).padStart(2, '0')}-01`;
+      rangeEnd = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (filterType === 'Annual') {
+      const y = selectedYear;
+      rangeStart = `${y}-01-01`;
+      rangeEnd = `${y}-12-31`;
+    } else if (filterType === 'Custom') {
+      rangeStart = startDate;
+      rangeEnd = endDate;
+    }
+
     const stockMap = {};
 
     (data?.stock || []).forEach(item => {
@@ -369,10 +489,14 @@ export default function StockTab({ data, saveData, activeBranch }) {
       let inOnRange = 0;
       for (let i = 0; i < stockInHistory.length; i++) {
         const h = stockInHistory[i];
-        if (h.ymd < selectedDate) {
-          inBefore += h.qty;
-        } else if (diffDays > 0 ? (h.ymd >= selectedDate && h.ymd <= todayYMD) : h.ymd === selectedDate) {
+        if (filterType === 'All Time') {
           inOnRange += h.qty;
+        } else {
+          if (h.ymd < rangeStart) {
+            inBefore += h.qty;
+          } else if (h.ymd >= rangeStart && h.ymd <= rangeEnd) {
+            inOnRange += h.qty;
+          }
         }
       }
 
@@ -380,10 +504,14 @@ export default function StockTab({ data, saveData, activeBranch }) {
       let saleOnRange = 0;
       for (let i = 0; i < salesHistory.length; i++) {
         const s = salesHistory[i];
-        if (s.ymd < selectedDate) {
-          saleBefore += s.qty;
-        } else if (diffDays > 0 ? (s.ymd >= selectedDate && s.ymd <= todayYMD) : s.ymd === selectedDate) {
+        if (filterType === 'All Time') {
           saleOnRange += s.qty;
+        } else {
+          if (s.ymd < rangeStart) {
+            saleBefore += s.qty;
+          } else if (s.ymd >= rangeStart && s.ymd <= rangeEnd) {
+            saleOnRange += s.qty;
+          }
         }
       }
 
@@ -398,7 +526,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
     });
 
     return stockMap;
-  }, [data?.stock, processedStockData, getDaysAgo, selectedDate, todayYMD]);
+  }, [data?.stock, processedStockData, getDaysAgo, selectedDate, selectedMonth, selectedYear, startDate, endDate, filterType, todayYMD]);
 
   // Helper to calculate Stock for any date (X-B for selectedDate equals previous date's BLNC)
   // Keeps same signature, but uses the cached itemsStockForSelectedDate for the active date.
@@ -452,15 +580,51 @@ export default function StockTab({ data, saveData, activeBranch }) {
     return (data.stock || []).filter(item => item.model.toLowerCase().includes(searchLower));
   }, [data.stock, tableSearch]);
 
-  // Group filtered stock by category
+  // Group filtered stock by category and sort items
   const stockByCategory = useMemo(() => {
     const map = {};
     filteredStock.forEach(item => {
       if (!map[item.category]) map[item.category] = [];
       map[item.category].push(item);
     });
+
+    // Sort items within each category
+    Object.keys(map).forEach(cat => {
+      map[cat].sort((a, b) => {
+        const aStock = itemsStockForSelectedDate[a.id] || { blnc: 0 };
+        const bStock = itemsStockForSelectedDate[b.id] || { blnc: 0 };
+
+        if (sortBy === 'latest') {
+          return b.id.localeCompare(a.id);
+        } else if (sortBy === 'oldest') {
+          return a.id.localeCompare(b.id);
+        } else if (sortBy === 'model-asc') {
+          return a.model.localeCompare(b.model);
+        } else if (sortBy === 'model-desc') {
+          return b.model.localeCompare(a.model);
+        } else if (sortBy === 'blnc-desc') {
+          return bStock.blnc - aStock.blnc;
+        } else if (sortBy === 'blnc-asc') {
+          return aStock.blnc - bStock.blnc;
+        } else if (sortBy === 'ntd-desc') {
+          return (b.ntd || 0) - (a.ntd || 0);
+        } else if (sortBy === 'ntd-asc') {
+          return (a.ntd || 0) - (b.ntd || 0);
+        } else if (sortBy === 'value-desc') {
+          const aValue = aStock.blnc * (a.ntd || 0);
+          const bValue = bStock.blnc * (b.ntd || 0);
+          return bValue - aValue;
+        } else if (sortBy === 'value-asc') {
+          const aValue = aStock.blnc * (a.ntd || 0);
+          const bValue = bStock.blnc * (b.ntd || 0);
+          return aValue - bValue;
+        }
+        return 0; // default order
+      });
+    });
+
     return map;
-  }, [filteredStock]);
+  }, [filteredStock, sortBy, itemsStockForSelectedDate]);
 
   // Group all stock by category (for print preview and fallback uses)
   const allStockByCategory = useMemo(() => {
@@ -478,12 +642,30 @@ export default function StockTab({ data, saveData, activeBranch }) {
     
     const item = purchaseHistoryItem;
     const itemHistory = (data.history || []).filter(h => h.stockId === item.id);
-    const itemSales = (data.sales || []).filter(s => s.stockId === item.id);
+    const itemSales = (data.sales || []).filter(s => {
+      if (s.items && s.items.length > 0) {
+        return s.items.some(si => si.stockId === item.id);
+      }
+      return s.stockId === item.id;
+    });
+
+    const mappedSales = [];
+    itemSales.forEach(s => {
+      const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+      const matchedItem = items.find(si => si.stockId === item.id);
+      if (matchedItem) {
+        mappedSales.push({
+          ...s,
+          qty: Number(matchedItem.qty || 0),
+          eventType: 'sale'
+        });
+      }
+    });
 
     // Combine and sort by date ascending
     const allEvents = [
       ...itemHistory.map(h => ({ ...h, eventType: 'history' })),
-      ...itemSales.map(s => ({ ...s, eventType: 'sale' }))
+      ...mappedSales
     ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     let balance = 0;
@@ -491,39 +673,45 @@ export default function StockTab({ data, saveData, activeBranch }) {
     const pricesMap = {}; // tx.id -> { prevNtd, newNtd }
 
     allEvents.forEach(event => {
+      let prevNtd = 0;
+      let addedNtd = 0;
+      let newNtd = 0;
+
       if (event.eventType === 'history') {
         if (event.type === 'Initial Stock') {
-          const prevNtd = 0;
-          let addedNtd = 0;
+          prevNtd = 0;
+          addedNtd = 0;
           const match = event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
           if (match) {
             addedNtd = parseFloat(match[1].replace(/,/g, ''));
           } else {
             addedNtd = item.ntd || 0;
           }
-          const newNtd = addedNtd;
+          newNtd = addedNtd;
           ntd = newNtd;
           balance = event.qty - (item.sale || 0);
           pricesMap[event.id] = { prevNtd, newNtd };
         } else if (event.type === 'Stock In') {
-          const prevNtd = ntd;
-          let addedNtd = 0;
+          prevNtd = ntd;
+          addedNtd = 0;
           const match = event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
           if (match) {
             addedNtd = parseFloat(match[1].replace(/,/g, ''));
           }
-          let newNtd = prevNtd === 0 ? addedNtd : (prevNtd + addedNtd) / 2;
+          newNtd = (prevNtd === 0 || balance <= 0)
+            ? addedNtd
+            : ((balance * prevNtd) + (event.qty * addedNtd)) / (balance + event.qty);
           ntd = newNtd;
           balance += event.qty;
           pricesMap[event.id] = { prevNtd, newNtd };
         } else if (event.type === 'Price Update') {
-          const prevNtd = ntd;
-          let addedNtd = 0;
+          prevNtd = ntd;
+          addedNtd = 0;
           const match = event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
           if (match) {
             addedNtd = parseFloat(match[1].replace(/,/g, ''));
           }
-          const newNtd = addedNtd;
+          newNtd = addedNtd;
           ntd = newNtd;
           pricesMap[event.id] = { prevNtd, newNtd };
         }
@@ -550,14 +738,17 @@ export default function StockTab({ data, saveData, activeBranch }) {
       ? (data.history || []).filter(h => (h.type === 'Stock In' || h.type === 'Initial Stock' || h.type === 'Price Update') && h.stockId === purchaseHistoryItem.id)
       : (globalHistoryType === 'purchases'
           ? (data.history || []).filter(h => h.type === 'Stock In' || h.type === 'Initial Stock' || h.type === 'Price Update')
-          : (data.sales || []).map(s => ({
-              date: s.date,
-              stockId: s.stockId,
-              type: 'Sale',
-              qty: s.qty,
-              total: s.salePrice,
-              details: `Sale: Rs ${s.salePrice.toLocaleString('en-IN')}` + (s.cashAmount > 0 || s.onlineAmount > 0 ? ` (${[s.cashAmount > 0 ? `C: ${s.cashAmount.toLocaleString('en-IN')}` : null, s.onlineAmount > 0 ? `O: ${s.onlineAmount.toLocaleString('en-IN')}` : null].filter(Boolean).join(' + ')})` : '')
-            }))
+          : (data.sales || []).flatMap(s => {
+              const items = s.items || [{ stockId: s.stockId, qty: s.qty, salePrice: s.salePrice }];
+              return items.map(item => ({
+                date: s.date,
+                stockId: item.stockId,
+                type: 'Sale',
+                qty: item.qty,
+                total: item.salePrice,
+                details: `Sale: Rs ${item.salePrice.toLocaleString('en-IN')}` + (s.customerName ? ` - ${s.customerName}` : '') + (s.invoiceNo ? ` (Inv: #${s.invoiceNo})` : '')
+              }));
+            })
         );
 
     const now = new Date();
@@ -627,33 +818,94 @@ export default function StockTab({ data, saveData, activeBranch }) {
       <div className={`h-full flex flex-col p-6 print-content ${(showPrintPreview || showPrintHistoryPreview) ? 'print-hidden' : ''}`}>
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Stock</h1>
-          <p className="text-gray-500">Manage Stock Items</p>
+          <h1 className="text-2xl font-bold text-gray-800">Stock</h1>
+          <p className="text-gray-500 text-sm">Manage Stock Items</p>
         </div>
         <div className="flex gap-3 items-center">
-          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <span className="text-xs font-semibold text-gray-600 uppercase">Date:</span>
-            <input 
-              type="date" 
-              value={selectedDate} 
-              onChange={e => setSelectedDate(e.target.value)}
-              className="text-sm font-medium text-gray-800 outline-none bg-transparent cursor-pointer"
-            />
-          </div>
-          <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
-            <span className="text-xs font-semibold text-gray-600 uppercase">Days Ago:</span>
-            <input 
-              type="number" 
-              min="0"
-              placeholder="0"
-              value={daysAgoInput} 
-              onChange={handleDaysAgoChange}
-              className="w-12 text-sm font-medium text-gray-800 outline-none bg-transparent"
-            />
-            {selectedDate !== todayYMD && (
+          <div className="flex items-center gap-2">
+            <select 
+              className="border border-gray-300 rounded-lg px-3 py-2 bg-white font-medium text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+              value={filterType} onChange={e => setFilterType(e.target.value)}
+            >
+              <option value="Daily">Daily</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Annual">Annual</option>
+              <option value="Custom">Custom Range</option>
+              <option value="All Time">All Time</option>
+            </select>
+
+            {filterType === 'Daily' && (
+              <>
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  <span className="text-xs font-semibold text-gray-600 uppercase">Date:</span>
+                  <input 
+                    type="date" 
+                    value={selectedDate} 
+                    onChange={e => setSelectedDate(e.target.value)}
+                    className="text-sm font-medium text-gray-800 outline-none bg-transparent cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-2 shadow-sm">
+                  <span className="text-xs font-semibold text-gray-600 uppercase">Days Ago:</span>
+                  <input 
+                    type="number" 
+                    min="0"
+                    placeholder="0"
+                    value={daysAgoInput} 
+                    onChange={handleDaysAgoChange}
+                    className="w-12 text-sm font-medium text-gray-800 outline-none bg-transparent"
+                  />
+                </div>
+              </>
+            )}
+
+            {filterType === 'Monthly' && (
+              <input 
+                type="month" 
+                className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm font-medium text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+              />
+            )}
+
+            {filterType === 'Annual' && (
+              <input 
+                type="number" 
+                min="2000"
+                max="2099"
+                className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm font-medium text-gray-700 w-24 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value)}
+                placeholder="Year"
+              />
+            )}
+
+            {filterType === 'Custom' && (
+              <div className="flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2 py-1 shadow-sm">
+                <input 
+                  type="date" 
+                  className="bg-transparent text-xs font-medium text-gray-700 outline-none cursor-pointer"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                />
+                <span className="text-xs text-gray-400 font-semibold">to</span>
+                <input 
+                  type="date" 
+                  className="bg-transparent text-xs font-medium text-gray-700 outline-none cursor-pointer"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                />
+              </div>
+            )}
+
+            {(filterType !== 'Daily' || selectedDate !== todayYMD) && filterType !== 'All Time' && (
               <button 
-                onClick={() => { setSelectedDate(todayYMD); setDaysAgoInput('0'); }}
+                onClick={() => {
+                  setFilterType('Daily');
+                  setSelectedDate(todayYMD);
+                  setDaysAgoInput('0');
+                }}
                 className="text-gray-400 hover:text-red-500 hover:bg-gray-100 p-0.5 rounded-full transition ml-1"
                 title="Reset to today"
               >
@@ -661,7 +913,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
               </button>
             )}
           </div>
-          {getDaysAgo(selectedDate) > 0 && (
+          {filterType === 'Daily' && getDaysAgo(selectedDate) > 0 && (
             <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg px-3 py-2 shadow-sm text-sm font-semibold">
               <span>Range: {formatReportDate(selectedDate)}</span>
             </div>
@@ -689,7 +941,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
             onChange={e => setTableSearch(e.target.value)}
           />
         </div>
-        <div className="w-64 shrink-0">
+        <div className="w-48 shrink-0">
           <select
             value={selectedCategoryFilter}
             onChange={e => setSelectedCategoryFilter(e.target.value)}
@@ -699,6 +951,24 @@ export default function StockTab({ data, saveData, activeBranch }) {
             {data.categories.map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
+          </select>
+        </div>
+        <div className="w-48 shrink-0">
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium text-gray-700 cursor-pointer"
+          >
+            <option value="latest">Latest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="model-asc">Model Name (A-Z)</option>
+            <option value="model-desc">Model Name (Z-A)</option>
+            <option value="blnc-desc">Balance (High to Low)</option>
+            <option value="blnc-asc">Balance (Low to High)</option>
+            <option value="ntd-desc">Unit Cost (High to Low)</option>
+            <option value="ntd-asc">Unit Cost (Low to High)</option>
+            <option value="value-desc">Total Value (High to Low)</option>
+            <option value="value-asc">Total Value (Low to High)</option>
           </select>
         </div>
       </div>
@@ -714,11 +984,12 @@ export default function StockTab({ data, saveData, activeBranch }) {
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">T-B</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Sale</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Blnc</th>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right print-hidden">NTD (Cost)</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right print-hidden">NTD</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right print-hidden">Total NTD</th>
               <th className="py-2.5 px-2 font-semibold text-center print-hidden w-24">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-xs">
             {data.categories
               .filter(category => selectedCategoryFilter === 'All' || category === selectedCategoryFilter)
               .map(category => {
@@ -741,7 +1012,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 <React.Fragment key={category}>
                   {/* Category Header */}
                   <tr className="bg-blue-50/50 hover:bg-blue-50 cursor-pointer print-header" onClick={() => toggleCategory(category)}>
-                    <td colSpan={9} className="py-0.5 px-1.5 border-b text-blue-800 font-bold">
+                    <td colSpan={10} className="py-0.5 px-1.5 border-b text-blue-800 font-bold">
                       <div className="flex items-center gap-2">
                         <span className="print-hidden">
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -776,6 +1047,9 @@ export default function StockTab({ data, saveData, activeBranch }) {
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-right text-gray-500 print-hidden font-medium">
                           {editing ? <input type="number" className="border p-1 w-20 text-right rounded" value={editForm.ntd} onChange={e=>setEditForm({...editForm, ntd: e.target.value})} /> : `Rs ${item.ntd?.toLocaleString('en-IN') || 0}`}
                         </td>
+                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-right text-gray-500 print-hidden font-bold">
+                          Rs {(blnc * (item.ntd || 0)).toLocaleString('en-IN')}
+                        </td>
                         <td className="py-0.5 px-1.5 print-hidden">
                           <div className="flex items-center justify-center gap-2">
                             {editing ? (
@@ -785,7 +1059,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                               </>
                             ) : (
                               <>
-                                <button onClick={() => { setAddStockForm({ stockId: item.id, in: '', ntd: '', desc: '' }); setShowAddStockModal(true); }} className="text-green-600 hover:bg-green-50 p-0.5 rounded transition" title="Add Stock"><PlusCircle className="w-4 h-4" /></button>
+                                <button onClick={() => { setAddStockForm({ stockId: item.id, in: '', ntd: String(item.ntd || 0), desc: '' }); setShowAddStockModal(true); }} className="text-green-600 hover:bg-green-50 p-0.5 rounded transition" title="Add Stock"><PlusCircle className="w-4 h-4" /></button>
                                 <button onClick={() => { setHistoryItem(item); setHistoryFilter('All'); }} className="text-indigo-600 hover:bg-indigo-50 p-0.5 rounded transition" title="Sales History"><TrendingUp className="w-4 h-4" /></button>
                                 <button onClick={() => { setShowGlobalHistory(true); setPurchaseHistoryItem(item); setGlobalHistoryFilter('All'); }} className="text-emerald-600 hover:bg-emerald-50 p-0.5 rounded transition" title="Purchase History"><ShoppingCart className="w-4 h-4" /></button>
                                 <button onClick={() => startEdit(item)} className="text-blue-600 hover:bg-blue-50 p-0.5 rounded transition" title="Edit Item"><Edit2 className="w-4 h-4" /></button>
@@ -800,12 +1074,13 @@ export default function StockTab({ data, saveData, activeBranch }) {
                   {isExpanded && (
                     <tr className="bg-slate-50/80 font-bold border-b-2 border-slate-300 font-sans">
                       <td className="py-1.5 px-2 border-r border-gray-200 text-center text-gray-500 font-semibold font-sans">-</td>
-                      <td className="py-1.5 px-2 border-r border-gray-200 text-slate-850 uppercase font-bold font-sans">Total {category}</td>
+                      <td className="py-1.5 px-2 border-r border-gray-200 text-slate-850 uppercase font-bold font-sans">Total</td>
                       <td className="py-1.5 px-2 border-r border-gray-200 text-center text-slate-800 font-bold font-sans">{catTotals.x_b}</td>
                       <td className="py-1.5 px-2 border-r border-gray-200 text-center text-slate-800 font-bold font-sans">{catTotals.in}</td>
                       <td className="py-1.5 px-2 border-r border-gray-200 text-center text-slate-800 font-bold font-sans">{catTotals.tb}</td>
                       <td className="py-1.5 px-2 border-r border-gray-200 text-center text-slate-800 font-bold font-sans">{catTotals.sale}</td>
                       <td className={`py-1.5 px-2 border-r border-gray-200 text-center font-bold font-sans ${catTotals.blnc > 0 ? 'text-green-700' : 'text-red-600'}`}>{catTotals.blnc}</td>
+                      <td className="py-1.5 px-2 border-r border-gray-200 text-right text-slate-700 print-hidden font-bold font-sans">-</td>
                       <td className="py-1.5 px-2 border-r border-gray-200 text-right text-slate-700 print-hidden font-bold font-sans">Rs {catTotals.value.toLocaleString('en-IN')}</td>
                       <td className="py-1.5 px-2 print-hidden text-center text-gray-400 font-semibold font-sans">-</td>
                     </tr>
@@ -817,16 +1092,16 @@ export default function StockTab({ data, saveData, activeBranch }) {
         </table>
       </div>
 
-      <div className="mt-6 bg-slate-900 text-white p-6 rounded-xl shadow-lg flex justify-between items-center print-hidden">
+      <div className="mt-4 bg-slate-900 text-white py-2 px-4 rounded-xl shadow-md flex justify-between items-center print-hidden">
         <div>
-          <h3 className="text-white text-sm font-semibold tracking-wider uppercase mb-1">Total Stock Value</h3>
-          <p className="text-xs text-slate-400">Based on Cost Price (NTD) × Available Balance</p>
+          <h3 className="text-white text-xs font-semibold tracking-wider uppercase">Total Stock Value</h3>
+          <p className="text-[10px] text-slate-400 mt-0.5">Based on Cost Price (NTD) × Available Balance</p>
         </div>
         <div className="text-right">
-          <div className="text-3xl font-bold text-green-400">
+          <div className="text-xl font-bold text-green-400">
             Rs {globalTotalValue.toLocaleString('en-IN')}
           </div>
-          <div className="text-sm font-semibold text-amber-300 mt-1">
+          <div className="text-xs font-semibold text-amber-300 mt-0.5">
             Zakat (2.5%): Rs {(globalTotalValue * 0.025).toLocaleString('en-IN')}
           </div>
         </div>
@@ -882,7 +1157,16 @@ export default function StockTab({ data, saveData, activeBranch }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cost Price (NTD)</label>
-                <input type="number" className="w-full border rounded p-2" placeholder="0" value={addForm.ntd} onChange={e => setAddForm({...addForm, ntd: e.target.value})} />
+                <input 
+                  type="text" 
+                  className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" 
+                  placeholder="0" 
+                  value={formatIndianNumber(addForm.ntd)} 
+                  onChange={e => {
+                    const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                    setAddForm({...addForm, ntd: rawVal});
+                  }} 
+                />
               </div>
               
               <div className="flex gap-3 justify-end mt-4">
@@ -944,7 +1228,11 @@ export default function StockTab({ data, saveData, activeBranch }) {
                          key={s.id}
                          className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0 flex justify-between items-center text-gray-900"
                          onClick={() => {
-                           setAddStockForm({...addStockForm, stockId: s.id});
+                           setAddStockForm({
+                             ...addStockForm,
+                             stockId: s.id,
+                             ntd: String(s.ntd || 0)
+                           });
                            setIsDropdownOpen(false);
                            setStockSearch('');
                          }}
@@ -966,7 +1254,17 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">New Cost Price (NTD)</label>
-                  <input type="number" className="w-full border rounded p-2" placeholder="0" value={addStockForm.ntd} onChange={e => setAddStockForm({...addStockForm, ntd: e.target.value})} required/>
+                  <input 
+                    type="text" 
+                    className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none" 
+                    placeholder="0" 
+                    value={formatIndianNumber(addStockForm.ntd)} 
+                    onChange={e => {
+                      const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                      setAddStockForm({...addStockForm, ntd: rawVal});
+                    }} 
+                    required
+                  />
                 </div>
               </div>
               
@@ -1016,14 +1314,19 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {(() => {
-                    let allTx = [
-                      ...(data.sales || []).filter(s => s.stockId === historyItem.id).map(s => ({
-                        date: s.date,
-                        type: 'Sale',
-                        qty: s.qty,
-                        details: `Sale: Rs ${s.salePrice.toLocaleString('en-IN')}` + (s.cashAmount > 0 || s.onlineAmount > 0 ? ` (${[s.cashAmount > 0 ? `C: ${s.cashAmount.toLocaleString('en-IN')}` : null, s.onlineAmount > 0 ? `O: ${s.onlineAmount.toLocaleString('en-IN')}` : null].filter(Boolean).join(' + ')})` : '')
-                      }))
-                    ];
+                    let allTx = [];
+                    (data.sales || []).forEach(s => {
+                      const items = s.items || [{ stockId: s.stockId, qty: s.qty, salePrice: s.salePrice }];
+                      const matchedItem = items.find(si => si.stockId === historyItem.id);
+                      if (matchedItem) {
+                        allTx.push({
+                          date: s.date,
+                          type: 'Sale',
+                          qty: matchedItem.qty,
+                          details: `Sale: Rs ${matchedItem.salePrice.toLocaleString('en-IN')}` + (s.customerName ? ` - ${s.customerName}` : '') + (s.invoiceNo ? ` (Inv: #${s.invoiceNo})` : '')
+                        });
+                      }
+                    });
                     
                     allTx.sort((a, b) => new Date(b.date) - new Date(a.date));
                     
@@ -1206,102 +1509,219 @@ export default function StockTab({ data, saveData, activeBranch }) {
             </div>
           </div>
 
-          <div className="bg-slate-800 w-full max-w-4xl flex-1 overflow-auto p-6 rounded-b-xl flex justify-center items-start print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
-            <div className="bg-white text-black p-8 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area">
-              <div>
-                <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
-                    <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
-                    <p className="text-sm font-semibold text-gray-600 mt-1">Stock Inventory Report</p>
-                    {data.settings?.branchAddress && <p className="text-[10px] text-gray-500 mt-0.5">{data.settings.branchAddress}</p>}
-                  </div>
-                  <div className="text-right text-xs text-gray-500">
-                    <p>Report Date: {formatReportDate(selectedDate)}</p>
-                    <p>Total Stock Items: {data.stock.length}</p>
-                  </div>
-                </div>
+          <div className="bg-slate-800 w-full max-w-4xl flex-1 overflow-auto p-6 rounded-b-xl flex flex-col items-center gap-6 print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
+            {(() => {
+              const allRows = [];
+              let printTotalValue = 0;
+              data.categories
+                .filter(category => selectedCategoryFilter === 'All' || category === selectedCategoryFilter)
+                .forEach(category => {
+                const catItems = stockByCategory[category] || [];
+                if (catItems.length === 0) return;
 
-                <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
-                  <thead>
-                    <tr className="bg-slate-800 text-white border-b border-gray-300">
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center w-8">#</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Model</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">X-B</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">In</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">T-B</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">Sale</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">Blnc</th>
-                      <th className="py-2.5 px-2 text-right">NTD (Cost)</th>
+                const catTotals = catItems.reduce((totals, item) => {
+                  const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                  totals.x_b += x_b;
+                  totals.in += inQty;
+                  totals.tb += tb;
+                  totals.sale += saleQty;
+                  totals.blnc += blnc;
+                  totals.value += blnc * (item.ntd || 0);
+                  return totals;
+                }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: 0 });
+
+                printTotalValue += catTotals.value;
+
+                allRows.push({
+                  type: 'header',
+                  categoryName: category,
+                  count: catItems.length
+                });
+
+                catItems.forEach((item, index) => {
+                  const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                  allRows.push({
+                    type: 'item',
+                    id: item.id,
+                    index: index + 1,
+                    model: item.model,
+                    x_b,
+                    inQty,
+                    tb,
+                    saleQty,
+                    blnc,
+                    ntd: item.ntd || 0
+                  });
+                });
+
+                allRows.push({
+                  type: 'total',
+                  categoryName: category,
+                  catTotals
+                });
+              });
+
+              // Balance pagination
+              const maxRowsPerPage = 170;
+              const maxRowsPerColumn = 85;
+              const pages = [];
+              let tempRows = [...allRows];
+
+              while (tempRows.length > 0) {
+                if (tempRows.length <= maxRowsPerPage) {
+                  pages.push({
+                    left: tempRows.slice(0, maxRowsPerColumn),
+                    right: tempRows.slice(maxRowsPerColumn)
+                  });
+                  break;
+                } else {
+                  pages.push({
+                    left: tempRows.slice(0, maxRowsPerColumn),
+                    right: tempRows.slice(maxRowsPerColumn, maxRowsPerPage)
+                  });
+                  tempRows = tempRows.slice(maxRowsPerPage);
+                }
+              }
+
+              const renderPrintRow = (row, i) => {
+                if (row.type === 'header') {
+                  return (
+                    <tr key={`h-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-gray-300">
+                      <td colSpan={9} className="py-0.5 px-0.5 text-slate-900 uppercase text-[6.5px] truncate">
+                        {row.categoryName} ({row.count} items)
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {data.categories.map(category => {
-                      const catItems = allStockByCategory[category] || [];
-                      if (catItems.length === 0) return null;
+                  );
+                } else if (row.type === 'item') {
+                  return (
+                    <tr key={`item-${row.id}-${i}`} className="border-b border-gray-200 leading-none">
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-gray-500 text-[6.5px]">{row.index}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 font-medium text-[6.5px] truncate max-w-[114px]" title={row.model}>{row.model}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.x_b}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.inQty}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-semibold text-[6.5px]">{row.tb}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.saleQty}</td>
+                      <td className={`py-0 px-0.5 border-r border-gray-200 text-center font-bold text-[6.5px] ${row.blnc > 0 ? 'text-green-700' : 'text-red-650'}`}>{row.blnc}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-right text-black text-[6.5px]">{row.ntd.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                      <td className="py-0 px-0.5 text-right text-black text-[6.5px]">{(row.blnc * row.ntd).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                } else if (row.type === 'total') {
+                  return (
+                    <tr key={`t-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-gray-300 font-sans leading-none">
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-gray-500 font-semibold text-[6.5px]">-</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 uppercase text-slate-800 font-bold text-[6.5px]">Total</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.x_b}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.in}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.tb}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.sale}</td>
+                      <td className={`py-0 px-0.5 border-r border-gray-200 text-center font-bold ${row.catTotals.blnc > 0 ? 'text-green-700' : 'text-red-650'} text-[6.5px]`}>{row.catTotals.blnc}</td>
+                      <td className="py-0 px-0.5 border-r border-gray-200 text-right font-bold text-slate-800 text-[6.5px]">-</td>
+                      <td className="py-0 px-0.5 text-right font-bold text-black text-[6.5px]">{row.catTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                }
+                return null;
+              };
 
-                      const catTotals = catItems.reduce((totals, item) => {
-                        const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
-                        totals.x_b += x_b;
-                        totals.in += inQty;
-                        totals.tb += tb;
-                        totals.sale += saleQty;
-                        totals.blnc += blnc;
-                        totals.value += blnc * (item.ntd || 0);
-                        return totals;
-                      }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: 0 });
+              const renderTable = (rows) => {
+                if (!rows || rows.length === 0) {
+                  return (
+                    <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6" style={{ tableLayout: 'fixed', visibility: 'hidden' }}>
+                      <thead>
+                        <tr className="bg-white text-black border-b-2 border-slate-800">
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[12px] text-[6px] font-bold">#</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-[6.5px] w-[114px] font-bold uppercase tracking-wider">Model</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">In</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Sale</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Blnc</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
+                           <th className="py-1.5 px-0.5 text-right w-[66px] text-[6.5px] font-bold uppercase tracking-wider">Total</th>
+                        </tr>
+                      </thead>
+                    </table>
+                  );
+                }
+                return (
+                    <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6" style={{ tableLayout: 'fixed' }}>
+                      <thead>
+                        <tr className="bg-white text-black border-b-2 border-slate-800">
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[12px] text-[6px] font-bold">#</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-[6.5px] w-[114px] font-bold uppercase tracking-wider">Model</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">In</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Sale</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Blnc</th>
+                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
+                           <th className="py-1.5 px-0.5 text-right w-[66px] text-[6.5px] font-bold uppercase tracking-wider">Total</th>
+                        </tr>
+                      </thead>
+                    <tbody>
+                      {rows.map((row, idx) => renderPrintRow(row, idx))}
+                    </tbody>
+                  </table>
+                );
+              };
 
-                      return (
-                        <React.Fragment key={category}>
-                          <tr className="bg-gray-200 font-bold border-b border-gray-300">
-                            <td colSpan={8} className="py-0.5 px-1.5 text-slate-900 uppercase">
-                              {category} ({catItems.length} items)
-                            </td>
-                          </tr>
-                          {catItems.map((item, index) => {
-                            const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
-                            return (
-                              <tr key={item.id} className="border-b border-gray-200">
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{index + 1}</td>
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium">{item.model}</td>
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center">{x_b}</td>
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center">{inQty}</td>
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-semibold">{tb}</td>
-                                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center">{saleQty}</td>
-                                <td className={`py-0.5 px-1.5 border-r border-gray-200 text-center font-bold ${blnc > 0 ? 'text-green-700' : 'text-red-600'}`}>{blnc}</td>
-                                 <td className="py-0.5 px-1.5 text-right text-black">Rs {item.ntd?.toLocaleString('en-IN') || 0}</td>
-                              </tr>
-                            );
-                          })}
-                          <tr className="bg-gray-100 font-bold border-b border-gray-300 font-sans">
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 text-center text-gray-500 font-semibold font-sans">-</td>
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 uppercase text-slate-800 font-bold font-sans">Total {category}</td>
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold font-sans text-slate-800">{catTotals.x_b}</td>
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold font-sans text-slate-800">{catTotals.in}</td>
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold font-sans text-slate-800">{catTotals.tb}</td>
-                            <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold font-sans text-slate-800">{catTotals.sale}</td>
-                            <td className={`py-0.5 px-1.5 border-r border-gray-200 text-center font-bold font-sans ${catTotals.blnc > 0 ? 'text-green-700' : 'text-red-600'}`}>{catTotals.blnc}</td>
-                            <td className="py-0.5 px-1.5 text-right font-bold font-sans text-black">Rs {catTotals.value.toLocaleString('en-IN')}</td>
-                          </tr>
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              return (
+                <div className="w-full flex flex-col items-center gap-6 print:block print:w-full print:bg-white print:p-0">
+                  {pages.map((page, pageIdx) => (
+                    <div 
+                      key={pageIdx} 
+                      className="bg-white text-black p-8 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area print:border-none print:shadow-none print:p-0 print:my-0"
+                      style={{ 
+                        pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto',
+                        breakAfter: pageIdx < pages.length - 1 ? 'page' : 'auto',
+                        marginBottom: pageIdx < pages.length - 1 ? '24px' : '0'
+                      }}
+                    >
+                      {/* Header */}
+                      <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
+                        <div>
+                          <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
+                          <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
+                          <p className="text-sm font-semibold text-gray-600 mt-1">Stock Inventory Report</p>
+                          {data.settings?.branchAddress && <p className="text-[10px] text-gray-500 mt-0.5">{data.settings.branchAddress}</p>}
+                        </div>
+                        <div className="text-right text-xs text-gray-500">
+                          <p>Report Date: {formatReportDate(selectedDate)}</p>
+                          <p>Total Stock Items: {filteredStock.length}</p>
+                          {pages.length > 1 && <p className="font-semibold text-slate-700">Page {pageIdx + 1} of {pages.length}</p>}
+                        </div>
+                      </div>
 
-              <div className="border-t-2 border-slate-900 pt-4 mt-6">
-                <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded">
-                  <div>
-                    <h3 className="text-xs uppercase font-bold text-slate-400">Total Stock Value</h3>
-                    <p className="text-[10px] text-slate-400">Cost Price (NTD) × Available Balance</p>
-                  </div>
-                  <div className="text-xl font-bold text-green-400">
-                    Rs {globalTotalValue.toLocaleString('en-IN')}
-                  </div>
+                      {/* Columns Grid */}
+                      <div className="grid grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: '14px', alignItems: 'start' }}>
+                        <div>
+                          {renderTable(page.left)}
+                        </div>
+                        <div>
+                          {renderTable(page.right)}
+                        </div>
+                      </div>
+
+                      {/* Footer on Last Page */}
+                      {pageIdx === pages.length - 1 && (
+                        <div className="border-t-2 border-slate-900 pt-4 mt-6">
+                          <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded">
+                            <div>
+                              <h3 className="text-xs uppercase font-bold text-slate-400">Total Stock Value</h3>
+                              <p className="text-[10px] text-slate-400">Cost Price (NTD) × Available Balance</p>
+                            </div>
+                            <div className="text-xl font-bold text-green-400">
+                              {printTotalValue.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1352,17 +1772,17 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
                 <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6 font-sans">
                   <thead>
-                    <tr className="bg-slate-800 text-white border-b border-gray-300">
-                      <th className="py-2 px-2 border-r border-slate-700 text-center w-8">#</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Date & Time</th>
-                      {!purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700">Item</th>}
-                      <th className="py-2 px-2 border-r border-slate-700 text-center">
+                    <tr className="bg-white text-black border-b-2 border-slate-800">
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date & Time</th>
+                      {!purchaseHistoryItem && <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Item</th>}
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center font-bold uppercase tracking-wider">
                         {purchaseHistoryItem || globalHistoryType === 'purchases' ? 'Qty Added' : 'Qty Sold'}
                       </th>
-                      {purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700 text-right">Prev Price</th>}
-                      {purchaseHistoryItem && <th className="py-2 px-2 border-r border-slate-700 text-right">New Price</th>}
-                      <th className="py-2 px-2 border-r border-slate-700 text-right">Total Amount</th>
-                      <th className="py-2 px-2">Details</th>
+                      {purchaseHistoryItem && <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Prev Price</th>}
+                      {purchaseHistoryItem && <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">New Price</th>}
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Total Amount</th>
+                      <th className="py-2.5 px-2 font-bold uppercase tracking-wider">Details</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-300 border-b border-gray-300">

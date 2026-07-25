@@ -172,6 +172,36 @@ export default function SalesTab({ data, saveData, activeBranch }) {
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [receiptSale, setReceiptSale] = useState(null);
 
+  const getTransactionDate = () => {
+    const now = new Date();
+    let targetYMD = todayYMD;
+
+    if (filterType === 'Daily') {
+      targetYMD = selectedDate;
+    } else if (filterType === 'Monthly') {
+      if (selectedMonth === currentYM) {
+        targetYMD = todayYMD;
+      } else {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        targetYMD = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+    } else if (filterType === 'Custom') {
+      targetYMD = endDate;
+    } else if (filterType === 'Annual') {
+      const y = Number(selectedYear);
+      const currY = now.getFullYear();
+      if (y === currY) {
+        targetYMD = todayYMD;
+      } else {
+        targetYMD = `${y}-12-31`;
+      }
+    }
+
+    const [y, m, d] = targetYMD.split('-').map(Number);
+    return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).toISOString();
+  };
+
   const grandTotal = useMemo(() => {
     return selectedItems.reduce((sum, item) => sum + item.salePrice, 0) + Number(tempForm.salePrice || 0);
   }, [selectedItems, tempForm.salePrice]);
@@ -289,7 +319,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
     const newSale = {
       id: Date.now().toString(),
       invoiceNo: invoiceNoInput.trim() ? parseInt(invoiceNoInput, 10) : (data.sales || []).length + 1,
-      date: new Date().toISOString(),
+      date: getTransactionDate(),
       customerName: customerName.trim() || undefined,
       customerPhone: customerPhone.trim() || undefined,
       items: itemsToSubmit,
@@ -378,9 +408,14 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
     if (selectedCategory && selectedCategory !== 'All') {
       result = result.filter(s => {
-        const stockItem = data.stock.find(item => item.id === s.stockId);
-        const cat = s.category || (stockItem ? stockItem.category : 'Other');
-        return cat === selectedCategory;
+        const items = s.items || [{ stockId: s.stockId, category: s.category }];
+        return items.some(item => {
+          const cat = item.category || (() => {
+            const stockItem = data.stock.find(i => i.id === item.stockId);
+            return stockItem ? stockItem.category : 'Other';
+          })();
+          return cat === selectedCategory;
+        });
       });
     }
 
@@ -453,8 +488,8 @@ export default function SalesTab({ data, saveData, activeBranch }) {
     <div className="h-full flex flex-col p-6 print-content">
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Sales</h1>
-          <p className="text-gray-500">Record sales and view profits</p>
+          <h1 className="text-2xl font-bold text-gray-800">Sales</h1>
+          <p className="text-gray-500 text-sm">Record sales and view profits</p>
         </div>
         <div className="flex gap-3">
           <div className="flex gap-2 items-center">
@@ -596,23 +631,25 @@ export default function SalesTab({ data, saveData, activeBranch }) {
         <table className="w-full text-left border-collapse print-table">
           <thead className="bg-slate-900 text-white sticky top-0 print-header shadow-sm text-sm uppercase tracking-wider">
             <tr>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-10">#</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-20">Inv No.</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Date</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Model</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Qty</th>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Cost (NTD)</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">NTD</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Sale Price</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Profit</th>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Payment</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-40">Payment</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Remarks</th>
               <th className="py-2.5 px-2 print-hidden w-20 text-center font-semibold">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-xs">
             {filteredSales.map((sale, index) => (
               <tr key={sale.id} className="hover:bg-slate-50 border-b border-gray-200 group">
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{getInvoiceNo(sale)}</td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-600 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
                   <div>{sale.model}</div>
                   {(sale.customerName || sale.customerPhone) && (
@@ -630,13 +667,13 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                   {sale.profit.toLocaleString('en-IN')}
                 </td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center">
-                  <div className="flex items-center justify-center gap-1 font-semibold text-xs">
-                    {sale.cashAmount > 0 && <span className="text-green-600">{sale.cashAmount.toLocaleString('en-IN')}</span>}
-                    {(sale.cashAmount > 0 && sale.onlineAmount > 0) && <span className="text-gray-400">|</span>}
-                    {sale.onlineAmount > 0 && <span className="text-blue-500">{sale.onlineAmount.toLocaleString('en-IN')}</span>}
+                  <div className="flex items-center justify-center gap-1 font-semibold text-xs font-sans whitespace-nowrap">
+                    {sale.cashAmount > 0 && <span className="text-green-600 font-sans">C: {sale.cashAmount.toLocaleString('en-IN')}</span>}
+                    {(sale.cashAmount > 0 && sale.onlineAmount > 0) && <span className="text-gray-400 font-sans">|</span>}
+                    {sale.onlineAmount > 0 && <span className="text-blue-500 font-sans">O: {sale.onlineAmount.toLocaleString('en-IN')}</span>}
                   </div>
                 </td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-500">{sale.remarks}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{sale.remarks}</td>
                 <td className="py-0.5 px-1.5 text-center print-hidden w-20">
                   <div className="flex justify-center gap-1.5">
                     <button 
@@ -658,32 +695,94 @@ export default function SalesTab({ data, saveData, activeBranch }) {
               </tr>
             ))}
             {filteredSales.length === 0 && (
-              <tr><td colSpan={10} className="py-0.5 px-1.5 text-center text-gray-500">No sales found for this filter.</td></tr>
+              <tr><td colSpan={11} className="py-0.5 px-1.5 text-center text-gray-500">No sales found for this filter.</td></tr>
             )}
           </tbody>
+          <tfoot className="border-t-2 border-slate-900 bg-slate-100 font-semibold text-xs text-gray-900 font-sans">
+            {/* Total Row */}
+            <tr className="border-b border-gray-300">
+              <td colSpan={4} className="py-2 px-1.5 border-r border-gray-200 text-center uppercase tracking-wider font-bold">Total</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold">{filteredSales.reduce((sum, s) => sum + s.qty, 0)}</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">
+                {filteredSales.reduce((sum, s) => sum + (s.items ? s.items.reduce((acc, item) => acc + (item.ntd * item.qty), 0) : (s.ntd || 0) * s.qty), 0).toLocaleString('en-IN')}
+              </td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-blue-700">{totals.sale.toLocaleString('en-IN')}</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700">{totals.profit.toLocaleString('en-IN')}</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-center">
+                <div className="flex items-center justify-center gap-1 font-bold">
+                  <span className="text-green-600">C: {totals.cash.toLocaleString('en-IN')}</span>
+                  <span className="text-gray-400">|</span>
+                  <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
+                </div>
+              </td>
+              <td colSpan={2} className="py-2 px-1.5"></td>
+            </tr>
+            {/* Expenses Row */}
+            <tr className="border-b border-gray-300 bg-red-50/30 text-red-650">
+              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">Expenses</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">
+                -{filteredExpenses.toLocaleString('en-IN')}
+              </td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-center">
+                <div className="flex items-center justify-center gap-1 font-bold">
+                  <span>C: {filteredExpenses.toLocaleString('en-IN')}</span>
+                  <span className="text-gray-400">|</span>
+                  <span>O: 0</span>
+                </div>
+              </td>
+              <td colSpan={2} className="py-2 px-1.5"></td>
+            </tr>
+            {/* Subtotal Row */}
+            <tr className="border-b border-gray-300 bg-green-50/30">
+              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700">Subtotal</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700">
+                {(totals.profit - filteredExpenses).toLocaleString('en-IN')}
+              </td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-center">
+                <div className="flex items-center justify-center gap-1 font-bold">
+                  <span className="text-green-700">C: {(totals.cash - filteredExpenses).toLocaleString('en-IN')}</span>
+                  <span className="text-gray-400">|</span>
+                  <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
+                </div>
+              </td>
+              <td colSpan={2} className="py-2 px-1.5"></td>
+            </tr>
+            {/* Grand Total Row */}
+            <tr className="border-b border-gray-300 bg-slate-200/50">
+              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-slate-800">Grand Total</td>
+              <td className="py-2 px-1.5 border-r border-gray-200 bg-slate-200/50"></td>
+              <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold text-slate-900">
+                Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}
+              </td>
+              <td colSpan={2} className="py-2 px-1.5"></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
-      <div className="grid grid-cols-5 gap-4 print-hidden">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-semibold uppercase">Cash / Online</p>
-          <p className="text-xl font-bold text-gray-900">Rs {totals.cash.toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</p>
+      <div className="grid grid-cols-5 gap-3 print-hidden">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Cash / Online</p>
+          <p className="text-sm font-bold text-gray-900 truncate">Rs {totals.cash.toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-semibold uppercase">Total Sale</p>
-          <p className="text-xl font-bold text-gray-900">Rs {totals.sale.toLocaleString('en-IN')}</p>
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Total Sale</p>
+          <p className="text-sm font-bold text-gray-900 truncate">Rs {totals.sale.toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-semibold uppercase">Total Profit</p>
-          <p className={`text-xl font-bold ${totals.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>Rs {totals.profit.toLocaleString('en-IN')}</p>
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Total Profit</p>
+          <p className={`text-sm font-bold truncate ${(totals.profit - filteredExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>Rs {(totals.profit - filteredExpenses).toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-semibold uppercase">Expenses</p>
-          <p className="text-xl font-bold text-red-600">Rs {filteredExpenses.toLocaleString('en-IN')}</p>
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Expenses</p>
+          <p className="text-sm font-bold text-red-600 truncate">Rs {filteredExpenses.toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-slate-900 p-4 rounded-xl shadow-md text-white">
-          <p className="text-xs text-slate-400 font-semibold uppercase">Net Balance (-Exp)</p>
-          <p className="text-xl font-bold text-green-400">Rs {netBalance.toLocaleString('en-IN')}</p>
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <p className="text-[10px] text-gray-500 font-semibold uppercase">Grand Total</p>
+          <p className="text-sm font-bold text-green-600 truncate">Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}</p>
         </div>
       </div>
 
@@ -794,7 +893,13 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                               key={s.id}
                               className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0 flex justify-between items-center text-gray-900"
                               onClick={() => {
-                                setTempForm({...tempForm, stockId: s.id});
+                                const qty = tempForm.qty || 1;
+                                setTempForm({
+                                  ...tempForm,
+                                  stockId: s.id,
+                                  qty: qty,
+                                  salePrice: (s.ntd || 0) * qty
+                                });
                                 setIsDropdownOpen(false);
                                 setStockSearch('');
                               }}
@@ -837,7 +942,14 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                             const maxQty = s ? s.x_b + s.in - s.sale - alreadyQty : Infinity;
                             if (Number(val) > maxQty) val = maxQty.toString();
                           }
-                          setTempForm({...tempForm, qty: val});
+                          const s = data.stock.find(i => i.id === tempForm.stockId);
+                          const unitPrice = s ? s.ntd || 0 : 0;
+                          const newQty = val === '' ? 0 : Number(val);
+                          setTempForm({
+                            ...tempForm,
+                            qty: val,
+                            salePrice: unitPrice * newQty
+                          });
                         }} 
                       />
                     </div>
@@ -993,6 +1105,14 @@ export default function SalesTab({ data, saveData, activeBranch }) {
       {/* Print Preview Modal */}
       {showPrintPreview && (
         <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center p-4 print:static print:block print:p-0 print:bg-white" onClick={() => setShowPrintPreview(false)}>
+          <style dangerouslySetInnerHTML={{__html: `
+            @media print {
+              @page {
+                size: A4 landscape !important;
+                margin: 10mm !important;
+              }
+            }
+          `}} />
           <div className="bg-slate-900 text-white rounded-t-xl w-full max-w-4xl px-6 py-3 flex justify-between items-center shadow-lg print-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <Printer className="w-5 h-5 text-blue-400" />
@@ -1031,15 +1151,15 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
                 <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                   <thead>
-                    <tr className="bg-slate-800 text-white border-b border-gray-300">
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center w-8">#</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Date</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Model</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center">Qty</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-right">Cost (NTD)</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-right">Sale Price</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-right">Profit</th>
-                      <th className="py-2.5 px-2 text-center">Payment</th>
+                    <tr className="bg-white text-black border-b-2 border-slate-800">
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Model</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center font-bold uppercase tracking-wider">Qty</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">NTD</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Sale Price</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Profit</th>
+                      <th className="py-2.5 px-2 text-center w-36 font-bold uppercase tracking-wider">Payment</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1054,16 +1174,76 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                         </td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold text-blue-700">{sale.salePrice.toLocaleString('en-IN')}</td>
                         <td className={`py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold ${sale.profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>{sale.profit.toLocaleString('en-IN')}</td>
-                        <td className="py-0.5 px-1.5 text-center text-[10px]">
-                          {sale.cashAmount > 0 ? `C: ${sale.cashAmount.toLocaleString('en-IN')}` : ''}
-                          {sale.cashAmount > 0 && sale.onlineAmount > 0 ? ' | ' : ''}
-                          {sale.onlineAmount > 0 ? `O: ${sale.onlineAmount.toLocaleString('en-IN')}` : ''}
+                        <td className="py-0.5 px-1.5 text-center text-[10px] font-sans">
+                          <div className="flex items-center justify-center gap-1 font-semibold font-sans whitespace-nowrap">
+                            {sale.cashAmount > 0 && <span className="text-green-600 font-sans">C: {sale.cashAmount.toLocaleString('en-IN')}</span>}
+                            {(sale.cashAmount > 0 && sale.onlineAmount > 0) && <span className="text-gray-400 font-sans">|</span>}
+                            {sale.onlineAmount > 0 && <span className="text-blue-500 font-sans">O: {sale.onlineAmount.toLocaleString('en-IN')}</span>}
+                          </div>
                         </td>
                       </tr>
                     ))}
                     {filteredSales.length === 0 && (
                       <tr><td colSpan={8} className="py-0.5 px-1.5 text-center text-gray-500">No sales records found.</td></tr>
                     )}
+                  </tbody>
+                  <tbody className="border-t-2 border-slate-900 bg-slate-100 font-semibold text-xs text-gray-900 font-sans print:bg-slate-100">
+                    {/* Total Row */}
+                    <tr className="border-b border-gray-300">
+                      <td colSpan={3} className="py-2 px-1.5 border-r border-gray-200 text-center uppercase tracking-wider font-bold text-[10px]">Total</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold text-[10px]">{filteredSales.reduce((sum, s) => sum + s.qty, 0)}</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">
+                        {filteredSales.reduce((sum, s) => sum + (s.items ? s.items.reduce((acc, item) => acc + (item.ntd * item.qty), 0) : (s.ntd || 0) * s.qty), 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-blue-700 text-[10px]">{totals.sale.toLocaleString('en-IN')}</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">{totals.profit.toLocaleString('en-IN')}</td>
+                      <td className="py-2 px-1.5 text-center">
+                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
+                          <span className="text-green-600">C: {totals.cash.toLocaleString('en-IN')}</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Expenses Row */}
+                    <tr className="border-b border-gray-300 bg-red-50/30 text-red-650">
+                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">Expenses</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">
+                        -{filteredExpenses.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2 px-1.5 text-center">
+                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
+                          <span>C: {filteredExpenses.toLocaleString('en-IN')}</span>
+                          <span className="text-gray-400">|</span>
+                          <span>O: 0</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Subtotal Row */}
+                    <tr className="border-b border-gray-300 bg-green-50/30">
+                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">Subtotal</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">
+                        {(totals.profit - filteredExpenses).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2 px-1.5 text-center">
+                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
+                          <span className="text-green-700">C: {(totals.cash - filteredExpenses).toLocaleString('en-IN')}</span>
+                          <span className="text-gray-400">|</span>
+                          <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Grand Total Row */}
+                    <tr className="border-b border-gray-300 bg-slate-200/50">
+                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-slate-800 text-[10px]">Grand Total</td>
+                      <td className="py-2 px-1.5 border-r border-gray-200 bg-slate-200/50"></td>
+                      <td className="py-2 px-1.5 text-center font-bold text-slate-900 text-[10px]">
+                        Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -1080,15 +1260,15 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                   </div>
                   <div className="bg-gray-100 p-2 rounded border border-gray-300">
                     <span className="text-gray-500 block text-[10px] uppercase">Total Profit</span>
-                    <span className="text-sm font-bold text-green-700">Rs {totals.profit.toLocaleString('en-IN')}</span>
+                    <span className={`text-sm font-bold ${(totals.profit - filteredExpenses) >= 0 ? 'text-green-700' : 'text-red-650'}`}>Rs {(totals.profit - filteredExpenses).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="bg-gray-100 p-2 rounded border border-gray-300">
                     <span className="text-gray-500 block text-[10px] uppercase">Expenses</span>
                     <span className="text-sm font-bold text-red-600">Rs {filteredExpenses.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="bg-slate-900 text-white p-2 rounded">
-                    <span className="text-slate-400 block text-[10px] uppercase">Net Balance (-Exp)</span>
-                    <span className="text-sm font-bold text-green-400">Rs {netBalance.toLocaleString('en-IN')}</span>
+                    <span className="text-slate-400 block text-[10px] uppercase">Grand Total</span>
+                    <span className="text-sm font-bold text-green-400">Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>
@@ -1158,12 +1338,12 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
               <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                 <thead>
-                  <tr className="bg-slate-800 text-white border-b border-gray-300">
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-center w-12 font-semibold">#</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Item Model</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-center w-20 font-semibold">Qty</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-right w-36 font-semibold">Unit Price</th>
-                    <th className="py-2.5 px-3 text-right w-36 font-semibold">Total</th>
+                  <tr className="bg-white text-black border-b-2 border-slate-800">
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-center w-12 font-bold uppercase tracking-wider">#</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 font-bold uppercase tracking-wider">Item Model</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-center w-20 font-bold uppercase tracking-wider">Qty</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-right w-36 font-bold uppercase tracking-wider">Unit Price</th>
+                    <th className="py-2.5 px-3 text-right w-36 font-bold uppercase tracking-wider">Total</th>
                   </tr>
                 </thead>
                 <tbody>

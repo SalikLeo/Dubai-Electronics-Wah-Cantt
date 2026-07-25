@@ -16,7 +16,7 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
     }
   }, [location]);
 
-  const [filterType, setFilterType] = useState('Monthly');
+  const [filterType, setFilterType] = useState('Daily');
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('latest');
@@ -49,11 +49,41 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
     description: '', amount: '', remarks: '' 
   });
 
+  const getTransactionDate = () => {
+    const now = new Date();
+    let targetYMD = todayYMD;
+
+    if (filterType === 'Daily') {
+      targetYMD = selectedDate;
+    } else if (filterType === 'Monthly') {
+      if (selectedMonth === currentYM) {
+        targetYMD = todayYMD;
+      } else {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        targetYMD = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+    } else if (filterType === 'Custom') {
+      targetYMD = endDate;
+    } else if (filterType === 'Annual') {
+      const y = Number(selectedYear);
+      const currY = now.getFullYear();
+      if (y === currY) {
+        targetYMD = todayYMD;
+      } else {
+        targetYMD = `${y}-12-31`;
+      }
+    }
+
+    const [y, m, d] = targetYMD.split('-').map(Number);
+    return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).toISOString();
+  };
+
   const handleAddSubmit = (e) => {
     e.preventDefault();
     const newExpense = {
       id: Date.now().toString(),
-      date: new Date().toISOString(),
+      date: getTransactionDate(),
       description: addForm.description,
       amount: Number(addForm.amount),
       remarks: addForm.remarks
@@ -130,8 +160,8 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
     <div className="h-full flex flex-col p-6 print-content">
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Expenses</h1>
-          <p className="text-gray-500">Track shop expenses and salaries</p>
+          <h1 className="text-2xl font-bold text-gray-800">Expenses</h1>
+          <p className="text-gray-500 text-sm">Track shop expenses and salaries</p>
         </div>
         <div className="flex gap-3">
 
@@ -194,14 +224,14 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
                 />
               </div>
             )}
-            {(filterType !== 'Monthly' || selectedMonth !== currentYM) && (
+            {(filterType !== 'Daily' || selectedDate !== todayYMD) && (
               <button 
                 onClick={() => {
-                  setFilterType('Monthly');
-                  setSelectedMonth(currentYM);
+                  setFilterType('Daily');
+                  setSelectedDate(todayYMD);
                 }}
                 className="text-gray-400 hover:text-red-500 hover:bg-gray-100 p-0.5 rounded-full transition ml-1"
-                title="Reset to current month"
+                title="Reset to today"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -251,14 +281,14 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
               <th className="py-2.5 px-2 print-hidden w-12 text-center"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-xs">
             {filteredExpenses.map((expense, index) => (
               <tr key={expense.id} className="hover:bg-slate-50 border-b border-gray-200 group">
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-600">{new Date(expense.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">{new Date(expense.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">{expense.description}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-bold text-red-600">Rs {expense.amount.toLocaleString('en-IN')}</td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-500">{expense.remarks}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{expense.remarks}</td>
                 <td className="py-0.5 px-1.5 text-center print-hidden">
                   <button onClick={() => deleteExpense(expense.id)} className="text-red-500 p-1 hover:bg-red-50 rounded transition">
                     <Trash2 className="w-4 h-4" />
@@ -273,12 +303,12 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
         </table>
       </div>
 
-      <div className="mt-6 bg-red-50 border border-red-100 p-6 rounded-xl flex justify-between items-center print-hidden">
+      <div className="mt-4 bg-red-50 border border-red-100 py-2 px-3 rounded-lg flex justify-between items-center print-hidden shadow-sm">
         <div>
-          <h3 className="text-red-800 text-sm font-semibold tracking-wider uppercase mb-1">Total Expenses</h3>
-          <p className="text-xs text-red-600">For selected period</p>
+          <h3 className="text-red-800 text-[10px] font-semibold tracking-wider uppercase">Total Expenses</h3>
+          <p className="text-[10px] text-red-600 mt-0.5">For selected period</p>
         </div>
-        <div className="text-3xl font-bold text-red-600">
+        <div className="text-lg font-bold text-red-600">
           Rs {totalExpense.toLocaleString('en-IN')}
         </div>
       </div>
@@ -349,15 +379,15 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
 
                 <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                   <thead>
-                    <tr className="bg-slate-800 text-white border-b border-gray-300">
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-center w-8">#</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Date</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700">Description</th>
-                      <th className="py-2.5 px-2 border-r border-slate-700 text-right">Amount</th>
-                      <th className="py-2.5 px-2">Remarks</th>
+                    <tr className="bg-white text-black border-b-2 border-slate-800">
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Description</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Amount</th>
+                      <th className="py-2.5 px-2 font-bold uppercase tracking-wider">Remarks</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="text-xs">
                     {filteredExpenses.map((expense, i) => (
                       <tr key={expense.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>

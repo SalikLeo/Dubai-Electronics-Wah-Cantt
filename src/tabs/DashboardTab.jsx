@@ -54,11 +54,15 @@ export default function DashboardTab({ data, saveData }) {
 
     const salesMap = {};
     (data.sales || []).forEach(s => {
-      const id = s.stockId;
-      if (!salesMap[id]) salesMap[id] = [];
-      salesMap[id].push({
-        qty: Number(s.qty || 0),
-        ymd: getYMDLocal(s.date)
+      const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+      items.forEach(item => {
+        const id = item.stockId;
+        if (!id) return;
+        if (!salesMap[id]) salesMap[id] = [];
+        salesMap[id].push({
+          qty: Number(item.qty || 0),
+          ymd: getYMDLocal(s.date)
+        });
       });
     });
 
@@ -125,8 +129,8 @@ export default function DashboardTab({ data, saveData }) {
       {/* Header */}
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
-          <p className="text-gray-500">Quick management and business metrics overview</p>
+          <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+          <p className="text-gray-500 text-sm">Quick management and business metrics overview</p>
         </div>
       </div>
 
@@ -189,8 +193,8 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Low Stock Items List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mb-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col mb-3">
+        <div className={`flex justify-between items-center ${showLowStock ? 'mb-4' : ''}`}>
           <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-red-500" /> Low Stock Items List
             {lowStockItems.length > 0 && (
@@ -247,8 +251,8 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Recent Transactions List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col mb-3">
+        <div className={`flex justify-between items-center ${showSales ? 'mb-4' : ''}`}>
           <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-indigo-600" /> Recent Sales History
           </h3>
@@ -304,8 +308,8 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Recent Expenses History */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mt-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col mb-3">
+        <div className={`flex justify-between items-center ${showExpenses ? 'mb-4' : ''}`}>
           <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
             <TrendingDown className="w-5 h-5 text-red-600" /> Recent Expenses History
           </h3>
@@ -351,8 +355,8 @@ export default function DashboardTab({ data, saveData }) {
       </div>
 
       {/* Recent Reminders */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 flex flex-col mt-6">
-        <div className="flex justify-between items-center mb-4">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col mb-3">
+        <div className={`flex justify-between items-center ${showReminders ? 'mb-4' : ''}`}>
           <h3 className="text-base font-bold text-gray-800 font-sans flex items-center gap-2">
             <Bell className="w-5 h-5 text-amber-500" /> Recent Reminders
           </h3>

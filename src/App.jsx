@@ -228,7 +228,7 @@ function App() {
     <Router>
       <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
         {/* Sidebar */}
-        <div className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10 shrink-0 print-hidden">
+        <div className="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-10 shrink-0 print-hidden overflow-y-auto sidebar-scroll">
           <div className="p-6 flex flex-col items-center border-b border-slate-800">
             {data.settings?.appIcon ? (
               <img src={data.settings.appIcon} alt="App Logo" className="w-36 h-36 rounded-2xl object-cover mb-4 shadow-lg border border-slate-700" />
@@ -242,13 +242,13 @@ function App() {
             <p className="text-slate-400 text-xs mt-2">Contact: {data.settings?.branchPhone || '0300-5387166'}</p>
           </div>
           
-          <nav className="flex-1 py-6 px-3 flex flex-col gap-2">
+          <nav className="flex-1 py-4 px-3 flex flex-col gap-1">
             {navItems.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.path}
                 className={({ isActive }) => 
-                  `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors font-medium ${
+                  `flex items-center gap-3 px-4 py-2 rounded-lg transition-colors font-medium ${
                     isActive ? 'bg-blue-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`
                 }
@@ -312,10 +312,6 @@ function App() {
             <div className="flex items-center gap-4">
               <div className="text-sm font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/50 select-none">
                 {liveTime}
-              </div>
-              <div className="text-xs font-bold bg-slate-100 text-slate-700 px-3.5 py-1.5 rounded-xl border border-slate-200/60 uppercase tracking-wider flex items-center gap-2 select-none">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                {activeBranch} Active
               </div>
             </div>
           </header>

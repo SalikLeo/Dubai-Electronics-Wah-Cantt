@@ -212,8 +212,8 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
       <div className={`h-full flex flex-col p-6 print-content ${showPrintPreview ? 'print-hidden' : ''}`}>
         <div className="flex justify-between items-center mb-6 print-hidden">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Stock Reminders</h1>
-            <p className="text-gray-500">Track and manage reminders for stock items currently unavailable</p>
+            <h1 className="text-2xl font-bold text-gray-800">Stock Reminders</h1>
+            <p className="text-gray-500 text-sm">Track and manage reminders for stock items currently unavailable</p>
           </div>
           <div className="flex gap-3 items-center">
             {/* Time Filter Controls */}
@@ -355,73 +355,75 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
           <table className="w-full text-left border-collapse print-table">
             <thead className="bg-slate-900 text-white sticky top-0 print-header text-sm uppercase tracking-wider">
               <tr>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold text-center w-12">#</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-36">Date Added</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Item Name</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-40">Category</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold text-center w-24">Quantity</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-32">Status</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold w-40">Date Received</th>
-                <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Remarks</th>
-                <th className="py-2.5 px-3 print-hidden w-24 text-center">Actions</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold text-center w-12">#</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold w-36">Date Added</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold">Item Name</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold w-40">Category</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold text-center w-24">Quantity</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold w-32">Status</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold w-40">Date Received</th>
+                <th className="py-1 px-1.5 border-r border-slate-700 font-semibold">Remarks</th>
+                <th className="py-1 px-1.5 print-hidden w-24 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="text-xs">
               {filteredReminders.map((reminder, index) => (
                 <tr key={reminder.id} className="hover:bg-slate-50 border-b border-gray-200 group">
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-[10px]">
                     {index + 1}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-sm text-gray-600">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">
                     {new Date(reminder.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 font-medium text-gray-900">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
                     {reminder.itemName}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-sm text-gray-600">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">
                     {reminder.category}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-center font-semibold text-gray-800">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-800">
                     {reminder.qty}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-sm">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200">
                     {reminder.status === 'pending' ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold bg-amber-100 text-amber-800">
                         Pending
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-semibold bg-green-100 text-green-800">
                         Received
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-sm text-gray-600">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">
                     {reminder.completedAt ? (
                       new Date(reminder.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
                     ) : (
                       <span className="text-gray-400 italic">—</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-3 border-r border-gray-200 text-sm text-gray-500">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">
                     {reminder.remarks || <span className="text-gray-300 italic">—</span>}
                   </td>
-                  <td className="py-2.5 px-3 text-center print-hidden flex items-center justify-center gap-2">
-                    {reminder.status === 'pending' && (
+                  <td className="py-0.5 px-1.5 text-center print-hidden">
+                    <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                      {reminder.status === 'pending' && (
+                        <button
+                          onClick={() => markAsReceived(reminder.id)}
+                          className="text-green-600 hover:text-green-800 hover:bg-green-50 p-1 rounded transition"
+                          title="Mark as Received"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
-                        onClick={() => markAsReceived(reminder.id)}
-                        className="text-green-600 hover:text-green-800 hover:bg-green-50 p-1 rounded transition"
-                        title="Mark as Received"
+                        onClick={() => deleteReminder(reminder.id)}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
+                        title="Delete Reminder"
                       >
-                        <Check className="w-4.5 h-4.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
-                    )}
-                    <button
-                      onClick={() => deleteReminder(reminder.id)}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition"
-                      title="Delete Reminder"
-                    >
-                      <Trash2 className="w-4.5 h-4.5" />
-                    </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -577,18 +579,18 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
 
                 <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                   <thead>
-                    <tr className="bg-slate-800 text-white border-b border-gray-300">
-                      <th className="py-2 px-2 border-r border-slate-700 text-center w-8">#</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Date Added</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Item Name</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Category</th>
-                      <th className="py-2 px-2 border-r border-slate-700 text-center w-16">Quantity</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Status</th>
-                      <th className="py-2 px-2 border-r border-slate-700">Date Received</th>
-                      <th className="py-2 px-2">Remarks</th>
+                    <tr className="bg-white text-black border-b-2 border-slate-800">
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date Added</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Item Name</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Category</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-16 font-bold uppercase tracking-wider">Quantity</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Status</th>
+                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date Received</th>
+                      <th className="py-2.5 px-2 font-bold uppercase tracking-wider">Remarks</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="text-xs">
                     {filteredReminders.map((reminder, i) => (
                       <tr key={reminder.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
                         <td className="py-1 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>

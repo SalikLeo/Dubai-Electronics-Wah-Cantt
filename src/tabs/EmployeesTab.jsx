@@ -245,8 +245,8 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
     <div className={`h-full flex flex-col p-6 print-content ${showPrintPreview ? 'print-hidden' : ''}`}>
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Employees</h1>
-          <p className="text-gray-500">Manage staff, commissions, and salary payouts</p>
+          <h1 className="text-2xl font-bold text-gray-800">Employees</h1>
+          <p className="text-gray-500 text-sm">Manage staff, commissions, and salary payouts</p>
         </div>
         <div className="flex gap-3 items-center">
 
@@ -319,7 +319,7 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
               <th className="py-2.5 px-2 font-semibold text-center">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-xs">
             {visibleEmployees.map((emp, index) => {
               const txs = getEmpTransactions(emp, selectedMonth);
               const commInMonth = txs.filter(t => t.type === 'Commission').reduce((sum, t) => sum + Number(t.amount || 0), 0);
@@ -331,10 +331,10 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
               return (
                 <tr key={emp.id} className={`border-b border-gray-100 hover:bg-slate-50/80 transition ${isInactive ? 'bg-gray-50/70 text-gray-500' : ''}`}>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
-                  <td className="py-0.5 px-1.5 border-r border-gray-200 font-bold text-gray-900 text-base">{emp.name}</td>
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 font-bold text-gray-900 text-sm">{emp.name}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-medium text-gray-700">Rs {baseSalaryInMonth.toLocaleString('en-IN')}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold text-blue-700">Rs {commInMonth.toLocaleString('en-IN')}</td>
-                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-bold text-blue-600 text-base">Rs {totalSalary.toLocaleString('en-IN')}</td>
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-bold text-blue-600 text-sm">Rs {totalSalary.toLocaleString('en-IN')}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold text-green-700">Rs {paidInMonth.toLocaleString('en-IN')}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold">
                     {paidInMonth >= totalSalary ? (
@@ -569,7 +569,7 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
                     <th className="py-2.5 px-2 font-semibold text-center w-12">Action</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-xs">
                   {selectedEmpTxs.map((tx, idx) => {
                     const fullIdx = selectedEmp.history.findIndex(h => h === tx);
                     const dateObj = new Date(tx.date);
@@ -663,17 +663,17 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
 
               <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                 <thead>
-                  <tr className="bg-slate-800 text-white border-b border-gray-300">
-                    <th className="py-2.5 px-2 border-r border-slate-700 text-center w-8">#</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700">Employee</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700 text-right">Base Salary</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700 text-right">Commissions</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700 text-right">Total Salary</th>
-                    <th className="py-2.5 px-2 border-r border-slate-700 text-right">Paid</th>
-                    <th className="py-2.5 px-2 text-center w-16">Status</th>
+                  <tr className="bg-white text-black border-b-2 border-slate-800">
+                    <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                    <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Employee</th>
+                    <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Base Salary</th>
+                    <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Commissions</th>
+                    <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Total Salary</th>
+                    <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Paid</th>
+                    <th className="py-2.5 px-2 text-center w-16 font-bold uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="text-xs">
                   {visibleEmployees.map((emp, index) => {
                     const txs = getEmpTransactions(emp, selectedMonth);
                     const commInMonth = txs.filter(t => t.type === 'Commission').reduce((sum, t) => sum + Number(t.amount || 0), 0);

@@ -115,6 +115,36 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
     setIsDropdownOpen(false);
   };
 
+  const getTransactionDate = () => {
+    const now = new Date();
+    let targetYMD = todayYMD;
+
+    if (filterType === 'Daily') {
+      targetYMD = selectedDate;
+    } else if (filterType === 'Monthly') {
+      if (selectedMonth === currentYM) {
+        targetYMD = todayYMD;
+      } else {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        targetYMD = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      }
+    } else if (filterType === 'Custom') {
+      targetYMD = endDate;
+    } else if (filterType === 'Annual') {
+      const y = Number(selectedYear);
+      const currY = now.getFullYear();
+      if (y === currY) {
+        targetYMD = todayYMD;
+      } else {
+        targetYMD = `${y}-12-31`;
+      }
+    }
+
+    const [y, m, d] = targetYMD.split('-').map(Number);
+    return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).toISOString();
+  };
+
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -141,7 +171,10 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
     if (addedNtd < 0) return await alert("Cost price cannot be negative");
 
     const currentNtd = stockItem.ntd || 0;
-    const newNtd = currentNtd === 0 ? addedNtd : (currentNtd + addedNtd) / 2;
+    const currentBalance = Math.max(0, (stockItem.x_b || 0) + (stockItem.in || 0) - (stockItem.sale || 0));
+    const newNtd = currentNtd === 0 || currentBalance <= 0
+      ? addedNtd
+      : ((currentBalance * currentNtd) + (qty * addedNtd)) / (currentBalance + qty);
 
     const updatedStock = data.stock.map(item =>
       item.id === stockItem.id ? {
@@ -153,7 +186,7 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
 
     const newTx = {
       id: Date.now().toString(),
-      date: new Date().toISOString(),
+      date: getTransactionDate(),
       stockId: stockItem.id,
       type: 'Stock In',
       qty: qty,
@@ -188,11 +221,29 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
         updatedItem.in = remainingStockIn.reduce((sum, h) => sum + Number(h.qty || 0), 0);
 
         const remainingItemHistory = updatedHistory.filter(h => h.stockId === tx.stockId);
-        const itemSales = (data.sales || []).filter(s => s.stockId === tx.stockId);
+        const itemSales = (data.sales || []).filter(s => {
+          if (s.items && s.items.length > 0) {
+            return s.items.some(si => si.stockId === tx.stockId);
+          }
+          return s.stockId === tx.stockId;
+        });
+
+        const mappedSales = [];
+        itemSales.forEach(s => {
+          const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+          const matchedItem = items.find(si => si.stockId === tx.stockId);
+          if (matchedItem) {
+            mappedSales.push({
+              ...s,
+              qty: Number(matchedItem.qty || 0),
+              eventType: 'sale'
+            });
+          }
+        });
 
         const allEvents = [
           ...remainingItemHistory.map(h => ({ ...h, eventType: 'history' })),
-          ...itemSales.map(s => ({ ...s, eventType: 'sale' }))
+          ...mappedSales
         ].sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let runningNtd = 0;
@@ -216,7 +267,9 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
               if (match) {
                 addedNtd = parseFloat(match[1].replace(/,/g, ''));
               }
-              runningNtd = runningNtd === 0 ? addedNtd : (runningNtd + addedNtd) / 2;
+              runningNtd = (runningNtd === 0 || runningBlnc <= 0)
+                ? addedNtd
+                : ((runningBlnc * runningNtd) + (event.qty * addedNtd)) / (runningBlnc + event.qty);
               runningBlnc += event.qty;
             } else if (event.type === 'Price Update') {
               let addedNtd = 0;
@@ -375,8 +428,8 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
     <div className={`h-full flex flex-col p-6 print-content ${(showPrintPreview || showReceiptPreview) ? 'print-hidden' : ''}`}>
       <div className="flex justify-between items-center mb-6 print-hidden">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800 font-sans">Purchases</h1>
-          <p className="text-gray-500 font-sans">Record purchases and view history</p>
+          <h1 className="text-2xl font-bold text-gray-800 font-sans">Purchases</h1>
+          <p className="text-gray-500 text-sm font-sans">Record purchases and view history</p>
         </div>
         <div className="flex gap-3">
           <div className="flex gap-2 items-center">
@@ -535,24 +588,24 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
           </div>
         ) : (
           <table className="w-full text-left border-collapse border border-gray-200">
-            <thead className="bg-slate-900 text-white sticky top-0 print-header shadow-sm text-sm uppercase tracking-wider whitespace-nowrap">
+            <thead className="bg-slate-900 text-white sticky top-0 print-header shadow-sm text-xs uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="py-2.5 px-2 border-r border-slate-700 text-center w-12 font-semibold">#</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 w-40 font-semibold">Date & Time</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Model</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 w-32 font-semibold">Category</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 text-center w-20 font-semibold">Qty</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 text-right w-36 font-semibold">Unit Cost (NTD)</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 text-right w-40 font-semibold">Total Cost</th>
-                <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Description</th>
-                <th className="py-2.5 px-2 text-center w-24 print-hidden font-semibold">Actions</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 text-center w-12 font-semibold">#</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 w-40 font-semibold">Date & Time</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 font-semibold">Model</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 w-32 font-semibold">Category</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 text-center w-20 font-semibold">Qty</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 text-right w-36 font-semibold">Unit Cost (NTD)</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 text-right w-40 font-semibold">Total Cost</th>
+                <th className="py-1.5 px-1.5 border-r border-slate-700 font-semibold">Description</th>
+                <th className="py-1.5 px-1.5 text-center w-24 print-hidden font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 text-sm">
+            <tbody className="divide-y divide-gray-200 text-xs">
               {filteredPurchases.map((tx, idx) => (
                 <tr key={tx.id} className="hover:bg-slate-50 border-b border-gray-200 group">
-                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{idx + 1}</td>
-                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-sm text-gray-600 whitespace-nowrap">
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-[10px]">{idx + 1}</td>
+                  <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">
                     {new Date(tx.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 font-bold text-gray-850">{tx.model}</td>
@@ -593,24 +646,24 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 print-hidden">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
-          <span className="text-xs uppercase font-bold text-gray-450 tracking-wider">Total Purchases Amount</span>
-          <span className="text-2xl font-extrabold text-blue-700 mt-1 font-sans">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 print-hidden">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Total Purchases Amount</span>
+          <span className="text-sm font-bold text-blue-700 truncate font-sans">
             Rs {totals.cost.toLocaleString('en-IN')}
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
-          <span className="text-xs uppercase font-bold text-gray-450 tracking-wider">Total Items Purchased</span>
-          <span className="text-2xl font-extrabold text-gray-800 mt-1 font-sans">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Total Items Purchased</span>
+          <span className="text-sm font-bold text-gray-800 truncate font-sans">
             {totals.qty.toLocaleString('en-IN')} Units
           </span>
         </div>
 
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
-          <span className="text-xs uppercase font-bold text-gray-455 tracking-wider">Total Transactions</span>
-          <span className="text-2xl font-extrabold text-gray-800 mt-1 font-sans">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+          <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Total Transactions</span>
+          <span className="text-sm font-bold text-gray-800 truncate font-sans">
             {filteredPurchases.length} Records
           </span>
         </div>
@@ -792,15 +845,15 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
 
               <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6 font-sans">
                 <thead>
-                  <tr className="bg-slate-800 text-white border-b border-gray-300">
-                    <th className="py-2 px-2 border-r border-slate-700 text-center w-8 font-semibold">#</th>
-                    <th className="py-2 px-2 border-r border-slate-700 font-semibold">Date & Time</th>
-                    <th className="py-2 px-2 border-r border-slate-700 font-semibold">Model Name</th>
-                    <th className="py-2 px-2 border-r border-slate-700 font-semibold">Category</th>
-                    <th className="py-2 px-2 border-r border-slate-700 text-center font-semibold">Qty</th>
-                    <th className="py-2 px-2 border-r border-slate-700 text-right font-semibold">Unit Cost (NTD)</th>
-                    <th className="py-2 px-2 border-r border-slate-700 text-right font-semibold">Total Cost</th>
-                    <th className="py-2 px-2 font-semibold">Description</th>
+                  <tr className="bg-white text-black border-b-2 border-slate-800">
+                    <th className="py-2 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
+                    <th className="py-2 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date & Time</th>
+                    <th className="py-2 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Model Name</th>
+                    <th className="py-2 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Category</th>
+                    <th className="py-2 px-2 border-r border-slate-300 text-center font-bold uppercase tracking-wider">Qty</th>
+                    <th className="py-2 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Unit Cost (NTD)</th>
+                    <th className="py-2 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Total Cost</th>
+                    <th className="py-2 px-2 font-bold uppercase tracking-wider">Description</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-300 border-b border-gray-300">
@@ -820,10 +873,10 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
               </table>
 
               <div className="border-t-2 border-slate-900 pt-4 mt-6">
-                <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded">
+                <div className="flex justify-between items-center bg-slate-900 text-white py-2 px-4 rounded">
                   <div>
-                    <h3 className="text-xs uppercase font-bold text-slate-400">Total Purchase Value</h3>
-                    <p className="text-[10px] text-slate-400">Sum of (Unit Cost NTD * Quantity) for all filtered items</p>
+                    <h3 className="text-xs uppercase font-bold text-white">Total Purchase Value</h3>
+                    <p className="text-[10px] text-slate-200">Sum of (Unit Cost NTD * Quantity) for all filtered items</p>
                   </div>
                   <div className="text-xl font-bold text-white">
                     Rs {totals.cost.toLocaleString('en-IN')}
@@ -886,12 +939,12 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
 
               <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
                 <thead>
-                  <tr className="bg-slate-800 text-white border-b border-gray-300">
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-center w-12 font-semibold">#</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 font-semibold">Item Model</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-center w-20 font-semibold">Qty</th>
-                    <th className="py-2.5 px-3 border-r border-slate-700 text-right w-36 font-semibold">Unit Cost (NTD)</th>
-                    <th className="py-2.5 px-3 text-right w-36 font-semibold">Total Cost</th>
+                  <tr className="bg-white text-black border-b-2 border-slate-800">
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-center w-12 font-bold uppercase tracking-wider">#</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 font-bold uppercase tracking-wider">Item Model</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-center w-20 font-bold uppercase tracking-wider">Qty</th>
+                    <th className="py-2.5 px-3 border-r border-slate-300 text-right w-36 font-bold uppercase tracking-wider">Unit Cost (NTD)</th>
+                    <th className="py-2.5 px-3 text-right w-36 font-bold uppercase tracking-wider">Total Cost</th>
                   </tr>
                 </thead>
                 <tbody>

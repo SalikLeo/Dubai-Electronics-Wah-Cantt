@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, Printer, Trash2, RefreshCw, ChevronDown, X } from 'lucide-react';
+import { Search, Plus, Printer, Trash2, RefreshCw, ChevronDown, X, Edit } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
 const formatIndianNumber = (val) => {
@@ -171,6 +171,32 @@ export default function SalesTab({ data, saveData, activeBranch }) {
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
   const [receiptSale, setReceiptSale] = useState(null);
+  
+  // Edit Sale States
+  const [editingSale, setEditingSale] = useState(null);
+  const [editForm, setEditForm] = useState({ 
+    cashAmount: '', onlineAmount: '', remarks: '' 
+  });
+  const [editCustomerName, setEditCustomerName] = useState('');
+  const [editCustomerPhone, setEditCustomerPhone] = useState('');
+  const [editInvoiceNoInput, setEditInvoiceNoInput] = useState('');
+  const [editSelectedItems, setEditSelectedItems] = useState([]);
+  const [editTempForm, setEditTempForm] = useState({ stockId: '', qty: '', salePrice: '' });
+  const [editStockSearch, setEditStockSearch] = useState('');
+  const [isEditDropdownOpen, setIsEditDropdownOpen] = useState(false);
+  const editDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (editDropdownRef.current && !editDropdownRef.current.contains(event.target)) {
+        setIsEditDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const getTransactionDate = () => {
     const now = new Date();
@@ -372,6 +398,189 @@ export default function SalesTab({ data, saveData, activeBranch }) {
     }
   };
 
+  const handleEditClick = (sale) => {
+    setEditingSale(sale);
+    setEditCustomerName(sale.customerName || '');
+    setEditCustomerPhone(sale.customerPhone || '');
+    setEditInvoiceNoInput(sale.invoiceNo ? sale.invoiceNo.toString() : '');
+    setEditSelectedItems(sale.items || [
+      { stockId: sale.stockId, model: sale.model, qty: sale.qty, ntd: sale.ntd || 0, salePrice: sale.salePrice, profit: sale.profit }
+    ]);
+    setEditForm({
+      cashAmount: sale.cashAmount || 0,
+      onlineAmount: sale.onlineAmount || 0,
+      remarks: sale.remarks || ''
+    });
+    setEditTempForm({ stockId: '', qty: '', salePrice: '' });
+    setEditStockSearch('');
+    setIsEditDropdownOpen(false);
+  };
+
+  const getEditAvailableStock = (stockItem) => {
+    if (!stockItem) return 0;
+    const oldItem = (editingSale?.items || [
+      { stockId: editingSale?.stockId, qty: editingSale?.qty }
+    ]).find(oi => oi.stockId === stockItem.id);
+    const originalQty = oldItem ? oldItem.qty : 0;
+    const alreadyAddedQty = editSelectedItems
+      .filter(si => si.stockId === stockItem.id)
+      .reduce((sum, si) => sum + si.qty, 0);
+    return stockItem.x_b + stockItem.in - (stockItem.sale || 0) + originalQty - alreadyAddedQty;
+  };
+
+  const editGrandTotal = useMemo(() => {
+    return editSelectedItems.reduce((sum, item) => sum + item.salePrice, 0) + Number(editTempForm.salePrice || 0);
+  }, [editSelectedItems, editTempForm.salePrice]);
+
+  useEffect(() => {
+    if (editingSale && Math.abs(editGrandTotal - editingSale.salePrice) > 0.01) {
+      setEditForm(prev => ({
+        ...prev,
+        cashAmount: editGrandTotal || '',
+        onlineAmount: ''
+      }));
+    }
+  }, [editGrandTotal, editingSale]);
+
+  const handleEditAddItemToSale = async () => {
+    const stockItem = data.stock.find(s => s.id === editTempForm.stockId);
+    if (!stockItem) return await alert("Select a valid item");
+
+    const qty = Number(editTempForm.qty);
+    if (qty <= 0) return await alert("Enter a valid quantity");
+
+    const available = getEditAvailableStock(stockItem);
+    if (available < qty) {
+      return await alert(`Not enough stock available! (Remaining available: ${available}, Requested: ${qty})`);
+    }
+
+    const unitNtd = stockItem.ntd || 0;
+    const itemSalePrice = Number(editTempForm.salePrice);
+    if (itemSalePrice < 0) return await alert("Sale price cannot be negative");
+    const profit = itemSalePrice - (unitNtd * qty);
+
+    const existingIndex = editSelectedItems.findIndex(si => si.stockId === stockItem.id);
+    const newItems = [...editSelectedItems];
+    if (existingIndex >= 0) {
+      newItems[existingIndex].qty += qty;
+      newItems[existingIndex].salePrice += itemSalePrice;
+      newItems[existingIndex].profit += profit;
+    } else {
+      newItems.push({
+        stockId: stockItem.id,
+        model: stockItem.model,
+        category: stockItem.category || 'Other',
+        qty: qty,
+        ntd: unitNtd,
+        salePrice: itemSalePrice,
+        profit: profit
+      });
+    }
+
+    setEditSelectedItems(newItems);
+    setEditTempForm({ stockId: '', qty: '', salePrice: '' });
+    setEditStockSearch('');
+    setIsEditDropdownOpen(false);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+
+    let itemsToSubmit = [...editSelectedItems];
+    if (editTempForm.stockId && editTempForm.qty && editTempForm.salePrice) {
+      const stockItem = data.stock.find(s => s.id === editTempForm.stockId);
+      if (stockItem) {
+        const qty = Number(editTempForm.qty);
+        const unitNtd = stockItem.ntd || 0;
+        const itemSalePrice = Number(editTempForm.salePrice);
+        const profit = itemSalePrice - (unitNtd * qty);
+
+        const existingIndex = itemsToSubmit.findIndex(si => si.stockId === stockItem.id);
+        if (existingIndex >= 0) {
+          itemsToSubmit[existingIndex].qty += qty;
+          itemsToSubmit[existingIndex].salePrice += itemSalePrice;
+          itemsToSubmit[existingIndex].profit += profit;
+        } else {
+          itemsToSubmit.push({
+            stockId: stockItem.id,
+            model: stockItem.model,
+            category: stockItem.category || 'Other',
+            qty: qty,
+            ntd: unitNtd,
+            salePrice: itemSalePrice,
+            profit: profit
+          });
+        }
+      }
+    }
+
+    if (itemsToSubmit.length === 0) {
+      return await alert("Please select a product and enter quantity/price, or add items to the sale.");
+    }
+
+    const cashAmt = Number(editForm.cashAmount || 0);
+    const onlineAmt = Number(editForm.onlineAmount || 0);
+    const finalGrandTotal = itemsToSubmit.reduce((sum, item) => sum + item.salePrice, 0);
+
+    if (Math.abs((cashAmt + onlineAmt) - finalGrandTotal) > 0.01) {
+      return await alert(`The total paid amount (Cash + Online = Rs ${(cashAmt + onlineAmt).toLocaleString('en-IN')}) must equal the grand total sale price (Rs ${finalGrandTotal.toLocaleString('en-IN')}).`);
+    }
+
+    // Stock check with reconciliation simulation
+    const tempStock = data.stock.map(item => {
+      const oldItem = (editingSale.items || [
+        { stockId: editingSale.stockId, qty: editingSale.qty }
+      ]).find(oi => oi.stockId === item.id);
+      
+      const refundedSaleQty = oldItem ? (item.sale || 0) - oldItem.qty : (item.sale || 0);
+      return { ...item, sale: Math.max(0, refundedSaleQty) };
+    });
+
+    for (const item of itemsToSubmit) {
+      const stockItem = tempStock.find(s => s.id === item.stockId);
+      if (!stockItem) return await alert(`Item ${item.model} not found in inventory.`);
+      const available = stockItem.x_b + stockItem.in - (stockItem.sale || 0);
+      if (available < item.qty) {
+        return await alert(`Not enough stock available for ${item.model}! (Available: ${available}, Requested: ${item.qty})`);
+      }
+    }
+
+    const grandQty = itemsToSubmit.reduce((sum, item) => sum + item.qty, 0);
+    const grandProfit = itemsToSubmit.reduce((sum, item) => sum + item.profit, 0);
+    const joinedModels = itemsToSubmit.map(item => `${item.model} (x${item.qty})`).join(', ');
+
+    const updatedSale = {
+      ...editingSale,
+      invoiceNo: editInvoiceNoInput.trim() ? parseInt(editInvoiceNoInput, 10) : editingSale.invoiceNo,
+      customerName: editCustomerName.trim() || undefined,
+      customerPhone: editCustomerPhone.trim() || undefined,
+      items: itemsToSubmit,
+      model: itemsToSubmit.length === 1 ? itemsToSubmit[0].model : joinedModels,
+      qty: grandQty,
+      salePrice: finalGrandTotal,
+      profit: grandProfit,
+      cashAmount: cashAmt,
+      onlineAmount: onlineAmt,
+      remarks: editForm.remarks
+    };
+
+    const updatedStock = tempStock.map(item => {
+      const soldItem = itemsToSubmit.find(si => si.stockId === item.id);
+      if (soldItem) {
+        return { ...item, sale: (item.sale || 0) + soldItem.qty };
+      }
+      return item;
+    });
+
+    saveData({ 
+      ...data, 
+      sales: data.sales.map(s => s.id === editingSale.id ? updatedSale : s),
+      stock: updatedStock
+    });
+
+    setEditingSale(null);
+  };
+
   // Filtering
   const filteredSales = useMemo(() => {
     let result = data.sales;
@@ -446,8 +655,8 @@ export default function SalesTab({ data, saveData, activeBranch }) {
   }, { sale: 0, profit: 0, cash: 0, online: 0 });
 
   // Filter expenses based on same timeframe to get net balance
-  const filteredExpenses = useMemo(() => {
-    let result = data.expenses;
+  const filteredExpensesList = useMemo(() => {
+    let result = data.expenses || [];
 
     if (filterType === 'Daily' && selectedDate) {
       const diffDays = getDaysAgo(selectedDate);
@@ -478,8 +687,12 @@ export default function SalesTab({ data, saveData, activeBranch }) {
         return ymd >= startDate && ymd <= endDate;
       });
     }
-    return result.reduce((sum, e) => sum + Number(e.amount), 0);
+    return result;
   }, [data.expenses, filterType, selectedDate, selectedMonth, selectedYear, startDate, endDate, todayYMD]);
+
+  const filteredExpenses = useMemo(() => {
+    return filteredExpensesList.reduce((sum, e) => sum + Number(e.amount), 0);
+  }, [filteredExpensesList]);
 
   const netBalance = totals.sale - filteredExpenses;
 
@@ -631,13 +844,12 @@ export default function SalesTab({ data, saveData, activeBranch }) {
         <table className="w-full text-left border-collapse print-table">
           <thead className="bg-slate-900 text-white sticky top-0 print-header shadow-sm text-sm uppercase tracking-wider">
             <tr>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-10">#</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-20">Inv No.</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Date</th>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Model</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Description</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center">Qty</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">NTD</th>
-              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Sale Price</th>
+              <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Sale</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-right">Profit</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold text-center w-40">Payment</th>
               <th className="py-2.5 px-2 border-r border-slate-700 font-semibold">Remarks</th>
@@ -647,7 +859,6 @@ export default function SalesTab({ data, saveData, activeBranch }) {
           <tbody className="text-xs">
             {filteredSales.map((sale, index) => (
               <tr key={sale.id} className="hover:bg-slate-50 border-b border-gray-200 group">
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{getInvoiceNo(sale)}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
@@ -673,7 +884,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                     {sale.onlineAmount > 0 && <span className="text-blue-500 font-sans">O: {sale.onlineAmount.toLocaleString('en-IN')}</span>}
                   </div>
                 </td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{sale.remarks}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-550">{sale.remarks === 'Customer Sale (Dummy)' ? '' : sale.remarks}</td>
                 <td className="py-0.5 px-1.5 text-center print-hidden w-20">
                   <div className="flex justify-center gap-1.5">
                     <button 
@@ -682,6 +893,13 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                       title="Print Receipt"
                     >
                       <Printer className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => handleEditClick(sale)} 
+                      className="text-green-600 p-1 hover:bg-green-50 rounded transition" 
+                      title="Edit Sale"
+                    >
+                      <Edit className="w-4 h-4" />
                     </button>
                     <button 
                       onClick={() => deleteSale(sale)} 
@@ -701,7 +919,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
           <tfoot className="border-t-2 border-slate-900 bg-slate-100 font-semibold text-xs text-gray-900 font-sans">
             {/* Total Row */}
             <tr className="border-b border-gray-300">
-              <td colSpan={4} className="py-2 px-1.5 border-r border-gray-200 text-center uppercase tracking-wider font-bold">Total</td>
+              <td colSpan={3} className="py-2 px-1.5 border-r border-gray-200 text-center uppercase tracking-wider font-bold">Total</td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold">{filteredSales.reduce((sum, s) => sum + s.qty, 0)}</td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">
                 {filteredSales.reduce((sum, s) => sum + (s.items ? s.items.reduce((acc, item) => acc + (item.ntd * item.qty), 0) : (s.ntd || 0) * s.qty), 0).toLocaleString('en-IN')}
@@ -719,7 +937,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
             </tr>
             {/* Expenses Row */}
             <tr className="border-b border-gray-300 bg-red-50/30 text-red-650">
-              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">Expenses</td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold">
                 -{filteredExpenses.toLocaleString('en-IN')}
@@ -735,7 +953,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
             </tr>
             {/* Subtotal Row */}
             <tr className="border-b border-gray-300 bg-green-50/30">
-              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700">Subtotal</td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700">
                 {(totals.profit - filteredExpenses).toLocaleString('en-IN')}
@@ -751,7 +969,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
             </tr>
             {/* Grand Total Row */}
             <tr className="border-b border-gray-300 bg-slate-200/50">
-              <td colSpan={6} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
+              <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-slate-800">Grand Total</td>
               <td className="py-2 px-1.5 border-r border-gray-200 bg-slate-200/50"></td>
               <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold text-slate-900">
@@ -763,24 +981,20 @@ export default function SalesTab({ data, saveData, activeBranch }) {
         </table>
       </div>
 
-      <div className="grid grid-cols-5 gap-3 print-hidden">
-        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+      <div className="flex flex-row gap-3 print-hidden w-full">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Cash / Online</p>
           <p className="text-sm font-bold text-gray-900 truncate">Rs {totals.cash.toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
-          <p className="text-[10px] text-gray-500 font-semibold uppercase">Total Sale</p>
-          <p className="text-sm font-bold text-gray-900 truncate">Rs {totals.sale.toLocaleString('en-IN')}</p>
-        </div>
-        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Total Profit</p>
           <p className={`text-sm font-bold truncate ${(totals.profit - filteredExpenses) >= 0 ? 'text-green-600' : 'text-red-600'}`}>Rs {(totals.profit - filteredExpenses).toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Expenses</p>
           <p className="text-sm font-bold text-red-600 truncate">Rs {filteredExpenses.toLocaleString('en-IN')}</p>
         </div>
-        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center">
+        <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Grand Total</p>
           <p className="text-sm font-bold text-green-600 truncate">Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}</p>
         </div>
@@ -1102,6 +1316,307 @@ export default function SalesTab({ data, saveData, activeBranch }) {
           </div>
         </div>
       )}
+      {/* Edit Sale Modal */}
+      {editingSale && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 print-hidden">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4 pb-2 border-b">
+              <h2 className="text-xl font-bold text-gray-800">Edit Sale</h2>
+              <button 
+                type="button" 
+                onClick={() => setEditingSale(null)}
+                className="text-gray-400 hover:text-gray-650 hover:bg-gray-100 p-2 rounded-full transition"
+                title="Cancel Edit"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
+              {/* Customer Details & Invoice No */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Customer Name (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter customer name..." 
+                    className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans" 
+                    value={editCustomerName} 
+                    onChange={e => setEditCustomerName(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Customer Phone (Optional)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Enter customer phone..." 
+                    className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans" 
+                    value={editCustomerPhone} 
+                    onChange={e => setEditCustomerPhone(e.target.value.replace(/[^0-9]/g, ''))} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Invoice #</label>
+                  <input 
+                    type="text" 
+                    placeholder="Invoice #" 
+                    className="w-full border rounded p-2 text-gray-800 outline-none focus:ring-2 focus:ring-green-500 font-sans font-semibold" 
+                    value={editInvoiceNoInput} 
+                    onChange={e => setEditInvoiceNoInput(e.target.value.replace(/[^0-9]/g, ''))} 
+                  />
+                </div>
+              </div>
+
+              {/* Edit Item Sub-Form */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-slate-50/50">
+                <h3 className="text-base font-bold text-gray-800 mb-3">Add Product Item</h3>
+                
+                <div className="flex flex-col gap-3">
+                  <div className="relative" ref={editDropdownRef}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 font-sans">Product Model</label>
+                    <div 
+                       className="w-full border border-gray-300 rounded p-2 bg-white cursor-pointer flex justify-between items-center"
+                       onClick={() => setIsEditDropdownOpen(!isEditDropdownOpen)}
+                    >
+                      <span className={editTempForm.stockId ? 'text-black font-medium' : 'text-gray-500 text-sm'}>
+                        {editTempForm.stockId ? (() => {
+                          const s = data.stock.find(item => item.id === editTempForm.stockId);
+                          const avail = getEditAvailableStock(s);
+                          return s ? `${s.model} (Rs ${s.ntd?.toLocaleString('en-IN')}) - Avail: ${avail}` : 'Select Product Model...';
+                        })() : 'Select Product Model...'}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-gray-500"/>
+                    </div>
+                    
+                    {isEditDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-56 overflow-y-auto">
+                        <div className="p-2 sticky top-0 bg-white border-b">
+                           <input
+                             type="text"
+                             className="w-full border rounded p-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 text-gray-900 bg-white"
+                             placeholder="Search by model name..."
+                             autoFocus
+                             value={editStockSearch}
+                             onChange={e => setEditStockSearch(e.target.value)}
+                             onClick={e => e.stopPropagation()}
+                           />
+                        </div>
+                        {data.stock.filter(s => {
+                          const avail = getEditAvailableStock(s);
+                          return avail > 0 && s.model.toLowerCase().includes(editStockSearch.toLowerCase());
+                        }).map(s => {
+                          const avail = getEditAvailableStock(s);
+                          return (
+                            <div
+                              key={s.id}
+                              className="p-2 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-b-0 flex justify-between items-center text-gray-900"
+                              onClick={() => {
+                                const qty = editTempForm.qty || 1;
+                                setEditTempForm({
+                                  ...editTempForm,
+                                  stockId: s.id,
+                                  qty: qty,
+                                  salePrice: (s.ntd || 0) * qty
+                                });
+                                setIsEditDropdownOpen(false);
+                                setEditStockSearch('');
+                              }}
+                            >
+                              <span className="font-semibold text-gray-900">{s.model} <span className="text-gray-500 font-normal">(Rs {s.ntd?.toLocaleString('en-IN')})</span></span> 
+                              <span className="text-gray-500 text-xs font-medium">Avail: {avail}</span>
+                            </div>
+                          );
+                        })}
+                        {data.stock.filter(s => {
+                          const avail = getEditAvailableStock(s);
+                          return avail > 0 && s.model.toLowerCase().includes(editStockSearch.toLowerCase());
+                        }).length === 0 && (
+                          <div className="p-2 text-sm text-gray-500 text-center">No available items found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max={editTempForm.stockId ? (() => { 
+                          const s = data.stock.find(i => i.id === editTempForm.stockId); 
+                          return getEditAvailableStock(s);
+                        })() : ''} 
+                        className="w-full border rounded p-2 text-sm" 
+                        placeholder="0" 
+                        value={editTempForm.qty} 
+                        onChange={e => {
+                          let val = e.target.value;
+                          if (editTempForm.stockId && val !== '') {
+                            const s = data.stock.find(i => i.id === editTempForm.stockId);
+                            const maxQty = getEditAvailableStock(s);
+                            if (Number(val) > maxQty) val = maxQty.toString();
+                          }
+                          const s = data.stock.find(i => i.id === editTempForm.stockId);
+                          const unitPrice = s ? s.ntd || 0 : 0;
+                          const newQty = val === '' ? 0 : Number(val);
+                          setEditTempForm({
+                            ...editTempForm,
+                            qty: val,
+                            salePrice: unitPrice * newQty
+                          });
+                        }} 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Total Sale Price</label>
+                      <input 
+                        type="text" 
+                        className="w-full border rounded p-2 text-sm" 
+                        placeholder="0" 
+                        value={formatIndianNumber(editTempForm.salePrice)} 
+                        onChange={e => {
+                          const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                          setEditTempForm({
+                            ...editTempForm,
+                            salePrice: rawVal === '' ? '' : Number(rawVal)
+                          });
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Add Item Button */}
+              <button 
+                type="button" 
+                onClick={handleEditAddItemToSale}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition shadow-sm mb-2"
+              >
+                Add Item to Sale
+              </button>
+
+              {/* Selected Items List */}
+              {editSelectedItems.length > 0 && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-slate-50/30 p-3">
+                  <h3 className="text-base font-bold text-gray-800 mb-2">Sale Items</h3>
+                  <table className="w-full text-xs text-left border-collapse bg-white rounded shadow-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-gray-600 border-b border-gray-200">
+                        <th className="py-2 px-2 font-semibold">Model</th>
+                        <th className="py-2 px-2 font-semibold text-center w-12">Qty</th>
+                        <th className="py-2 px-2 font-semibold text-right w-24">Sale Price</th>
+                        <th className="py-2 px-2 font-semibold text-center w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {editSelectedItems.map((item, idx) => (
+                        <tr key={idx} className="border-b border-gray-150 last:border-b-0">
+                          <td className="py-1.5 px-2 font-medium text-gray-800">{item.model}</td>
+                          <td className="py-1.5 px-2 text-center font-bold text-gray-700">{item.qty}</td>
+                          <td className="py-1.5 px-2 text-right font-bold text-blue-600">Rs {item.salePrice.toLocaleString('en-IN')}</td>
+                          <td className="py-1.5 px-2 text-center">
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const updated = editSelectedItems.filter((_, i) => i !== idx);
+                                setEditSelectedItems(updated);
+                              }}
+                              className="text-red-500 hover:bg-red-50 p-1 rounded transition"
+                              title="Remove Item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 font-bold border-t border-gray-200 text-gray-800">
+                        <td className="py-1.5 px-2">Grand Total</td>
+                        <td className="py-1.5 px-2 text-center">
+                          {editSelectedItems.reduce((sum, item) => sum + item.qty, 0)}
+                        </td>
+                        <td className="py-1.5 px-2 text-right text-blue-700">
+                          Rs {editSelectedItems.reduce((sum, item) => sum + item.salePrice, 0).toLocaleString('en-IN')}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Payment Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cash Amount (Rs)</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded p-2 text-sm font-semibold" 
+                    placeholder="0" 
+                    value={formatIndianNumber(editForm.cashAmount)} 
+                    onChange={e => {
+                      const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                      const cashVal = rawVal === '' ? '' : Number(rawVal);
+                      if (cashVal === '') {
+                        setEditForm({...editForm, cashAmount: '', onlineAmount: ''});
+                      } else {
+                        const cappedCash = Math.min(editGrandTotal, cashVal);
+                        const diff = editGrandTotal - cappedCash;
+                        setEditForm({
+                          ...editForm,
+                          cashAmount: cappedCash,
+                          onlineAmount: diff <= 0 ? 0 : diff
+                        });
+                      }
+                    }} 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Online Amount (Rs)</label>
+                  <input 
+                    type="text" 
+                    className="w-full border rounded p-2 text-sm font-semibold" 
+                    placeholder="0" 
+                    value={formatIndianNumber(editForm.onlineAmount)} 
+                    onChange={e => {
+                      const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                      const onlineVal = rawVal === '' ? '' : Number(rawVal);
+                      if (onlineVal === '') {
+                        setEditForm({...editForm, onlineAmount: '', cashAmount: ''});
+                      } else {
+                        const cappedOnline = Math.min(editGrandTotal, onlineVal);
+                        const diff = editGrandTotal - cappedOnline;
+                        setEditForm({
+                          ...editForm,
+                          onlineAmount: cappedOnline,
+                          cashAmount: diff <= 0 ? 0 : diff
+                        });
+                      }
+                    }} 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
+                <input 
+                  type="text" 
+                  className="w-full border rounded p-2 text-sm" 
+                  value={editForm.remarks} 
+                  onChange={e => setEditForm({...editForm, remarks: e.target.value})} 
+                />
+              </div>
+
+              <div className="flex gap-3 justify-end mt-4 pt-3 border-t">
+                <button type="button" onClick={() => setEditingSale(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-medium transition">Cancel</button>
+                <button type="submit" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-medium transition">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {/* Print Preview Modal */}
       {showPrintPreview && (
         <div className="fixed inset-0 bg-black/60 z-50 flex flex-col items-center justify-center p-4 print:static print:block print:p-0 print:bg-white" onClick={() => setShowPrintPreview(false)}>
@@ -1149,126 +1664,144 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                   </div>
                 </div>
 
-                <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6">
+                <table className="w-full text-left text-[10px] border-collapse border border-gray-300 mb-6">
                   <thead>
+                    <tr className="bg-white text-black">
+                      <th rowSpan={2} className="py-1 px-2 border-r border-b-2 border-slate-400 border-b-slate-800 font-bold uppercase tracking-wider align-bottom pb-2 w-[18%]">Description</th>
+                      <th rowSpan={2} className="py-1 px-2 border-r border-b-2 border-slate-400 border-b-slate-800 text-center font-bold uppercase tracking-wider align-bottom pb-2 w-[4%]">Qty</th>
+                      <th rowSpan={2} className="py-1 px-2 border-r border-b-2 border-slate-400 border-b-slate-800 text-right font-bold uppercase tracking-wider align-bottom pb-2 w-[6%]">NTD</th>
+                      <th rowSpan={2} className="py-1 px-2 border-r border-b-2 border-slate-400 border-b-slate-800 text-right font-bold uppercase tracking-wider align-bottom pb-2 w-[7%]">Sale</th>
+                      <th rowSpan={2} className="py-1 px-2 border-r border-b-2 border-slate-400 border-b-slate-800 text-right font-bold uppercase tracking-wider align-bottom pb-2 w-[7%]">Profit</th>
+                      <th colSpan={2} className="py-1 px-2 border-r border-b border-slate-400 text-center font-bold uppercase tracking-wider text-[10px]">Payment Mode</th>
+                      <th rowSpan={2} className="py-1 px-2 border-b-2 border-slate-400 border-b-slate-800 font-bold uppercase tracking-wider align-bottom pb-2 w-[44%]">Remarks</th>
+                    </tr>
                     <tr className="bg-white text-black border-b-2 border-slate-800">
-                      <th className="py-2.5 px-2 border-r border-slate-300 text-center w-8 font-bold uppercase tracking-wider">#</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Date</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 font-bold uppercase tracking-wider">Model</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 text-center font-bold uppercase tracking-wider">Qty</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">NTD</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Sale Price</th>
-                      <th className="py-2.5 px-2 border-r border-slate-300 text-right font-bold uppercase tracking-wider">Profit</th>
-                      <th className="py-2.5 px-2 text-center w-36 font-bold uppercase tracking-wider">Payment</th>
+                      <th className="py-1 px-2 border-r border-slate-400 text-right w-[7%] font-bold uppercase tracking-wider text-[10px]">Cash</th>
+                      <th className="py-1 px-2 border-r border-slate-400 text-right w-[7%] font-bold uppercase tracking-wider text-[10px]">Online</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredSales.map((sale, i) => (
-                      <tr key={sale.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium">{sale.model}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-center">{sale.qty}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-right">
-                          {(sale.items ? sale.items.reduce((sum, item) => sum + (item.ntd * item.qty), 0) : (sale.ntd || 0) * sale.qty).toLocaleString('en-IN')}
+                      <tr key={sale.id} className={`border-b border-slate-400 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 font-medium">{sale.model}</td>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 text-center">{sale.qty}</td>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 text-right">
+                          {sale.items ? sale.items.reduce((sum, item) => sum + (item.ntd * item.qty), 0) : (sale.ntd || 0) * sale.qty}
                         </td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold text-blue-700">{sale.salePrice.toLocaleString('en-IN')}</td>
-                        <td className={`py-0.5 px-1.5 border-r border-gray-200 text-right font-semibold ${sale.profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>{sale.profit.toLocaleString('en-IN')}</td>
-                        <td className="py-0.5 px-1.5 text-center text-[10px] font-sans">
-                          <div className="flex items-center justify-center gap-1 font-semibold font-sans whitespace-nowrap">
-                            {sale.cashAmount > 0 && <span className="text-green-600 font-sans">C: {sale.cashAmount.toLocaleString('en-IN')}</span>}
-                            {(sale.cashAmount > 0 && sale.onlineAmount > 0) && <span className="text-gray-400 font-sans">|</span>}
-                            {sale.onlineAmount > 0 && <span className="text-blue-500 font-sans">O: {sale.onlineAmount.toLocaleString('en-IN')}</span>}
-                          </div>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 text-right font-semibold text-blue-700">{sale.salePrice}</td>
+                        <td className={`py-0.5 px-1.5 border-r border-slate-400 text-right font-semibold ${sale.profit >= 0 ? 'text-green-700' : 'text-red-655'}`}>{sale.profit}</td>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 text-right font-semibold text-[10px] text-green-700 font-sans">
+                          {sale.cashAmount > 0 ? sale.cashAmount : '-'}
                         </td>
+                        <td className="py-0.5 px-1.5 border-r border-slate-400 text-right font-semibold text-[10px] text-blue-600 font-sans">
+                          {sale.onlineAmount > 0 ? sale.onlineAmount : '-'}
+                        </td>
+                        <td className="py-0.5 px-1.5 text-[10px] text-gray-700 truncate">{(sale.remarks && sale.remarks !== 'Customer Sale (Dummy)') ? sale.remarks : ''}</td>
                       </tr>
                     ))}
                     {filteredSales.length === 0 && (
-                      <tr><td colSpan={8} className="py-0.5 px-1.5 text-center text-gray-500">No sales records found.</td></tr>
+                      <tr><td colSpan={9} className="py-0.5 px-1.5 text-center text-gray-500">No sales records found.</td></tr>
                     )}
                   </tbody>
-                  <tbody className="border-t-2 border-slate-900 bg-slate-100 font-semibold text-xs text-gray-900 font-sans print:bg-slate-100">
+                  <tbody className="border-t-2 border-slate-900 bg-slate-100 font-semibold text-[10px] text-gray-900 font-sans print:bg-slate-100">
                     {/* Total Row */}
-                    <tr className="border-b border-gray-300">
-                      <td colSpan={3} className="py-2 px-1.5 border-r border-gray-200 text-center uppercase tracking-wider font-bold text-[10px]">Total</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-center font-bold text-[10px]">{filteredSales.reduce((sum, s) => sum + s.qty, 0)}</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">
-                        {filteredSales.reduce((sum, s) => sum + (s.items ? s.items.reduce((acc, item) => acc + (item.ntd * item.qty), 0) : (s.ntd || 0) * s.qty), 0).toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-blue-700 text-[10px]">{totals.sale.toLocaleString('en-IN')}</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">{totals.profit.toLocaleString('en-IN')}</td>
-                      <td className="py-2 px-1.5 text-center">
-                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
-                          <span className="text-green-600">C: {totals.cash.toLocaleString('en-IN')}</span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
-                        </div>
-                      </td>
+                    <tr className="border-b border-slate-400">
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-center uppercase tracking-wider font-bold text-[10px]">Total</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-center font-bold text-[10px]">{filteredSales.reduce((sum, s) => sum + s.qty, 0)}</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-[10px]">-</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-blue-700 text-[10px]">{totals.sale}</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-green-700 text-[10px]">{totals.profit}</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-green-700 text-[10px]">{totals.cash}</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-blue-700 text-[10px]">{totals.online}</td>
+                      <td className="py-2 px-1.5 text-center"></td>
                     </tr>
                     {/* Expenses Row */}
-                    <tr className="border-b border-gray-300 bg-red-50/30 text-red-650">
-                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">Expenses</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-[10px]">
-                        -{filteredExpenses.toLocaleString('en-IN')}
+                    <tr className="border-b border-slate-400 bg-red-50/30 text-red-650">
+                      <td colSpan={3} className="py-2 px-1.5 border-r border-slate-400 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-[10px]">Expenses</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-[10px]">
+                        -{filteredExpenses}
                       </td>
-                      <td className="py-2 px-1.5 text-center">
-                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
-                          <span>C: {filteredExpenses.toLocaleString('en-IN')}</span>
-                          <span className="text-gray-400">|</span>
-                          <span>O: 0</span>
-                        </div>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-red-600 text-[10px]">
+                        {filteredExpenses > 0 ? filteredExpenses : '-'}
                       </td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-gray-400 text-[10px]">-</td>
+                      <td className="py-2 px-1.5 text-center"></td>
                     </tr>
                     {/* Subtotal Row */}
-                    <tr className="border-b border-gray-300 bg-green-50/30">
-                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">Subtotal</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-green-700 text-[10px]">
-                        {(totals.profit - filteredExpenses).toLocaleString('en-IN')}
+                    <tr className="border-b border-slate-400 bg-green-50/30">
+                      <td colSpan={3} className="py-2 px-1.5 border-r border-slate-400 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-green-700 text-[10px]">Subtotal</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-green-700 text-[10px]">
+                        {totals.profit - filteredExpenses}
                       </td>
-                      <td className="py-2 px-1.5 text-center">
-                        <div className="flex items-center justify-center gap-1 font-bold text-[10px]">
-                          <span className="text-green-700">C: {(totals.cash - filteredExpenses).toLocaleString('en-IN')}</span>
-                          <span className="text-gray-400">|</span>
-                          <span className="text-blue-500">O: {totals.online.toLocaleString('en-IN')}</span>
-                        </div>
-                      </td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-green-700 text-[10px]">{totals.cash - filteredExpenses}</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-blue-700 text-[10px]">{totals.online}</td>
+                      <td className="py-2 px-1.5 text-center"></td>
                     </tr>
                     {/* Grand Total Row */}
-                    <tr className="border-b border-gray-300 bg-slate-200/50">
-                      <td colSpan={5} className="py-2 px-1.5 border-r border-gray-200 border-none"></td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 text-right font-bold text-slate-800 text-[10px]">Grand Total</td>
-                      <td className="py-2 px-1.5 border-r border-gray-200 bg-slate-200/50"></td>
-                      <td className="py-2 px-1.5 text-center font-bold text-slate-900 text-[10px]">
-                        Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}
+                    <tr className="border-b border-slate-400 bg-slate-200/50">
+                      <td colSpan={3} className="py-2 px-1.5 border-r border-slate-400 border-none"></td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 text-right font-bold text-slate-800 text-[10px]">Grand Total</td>
+                      <td className="py-2 px-1.5 border-r border-slate-400 bg-slate-200/50"></td>
+                      <td colSpan={2} className="py-2 px-1.5 border-r border-slate-400 text-center font-bold text-slate-900 text-[10px]">
+                        Rs {(totals.cash - filteredExpenses) + totals.online}
                       </td>
+                      <td className="py-2 px-1.5 bg-slate-200/50"></td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
+              {filteredExpensesList.length > 0 && (
+                <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
+                  <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1.5">Expenses List</h3>
+                  <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-slate-100 text-black border-b border-gray-300 font-bold uppercase tracking-wider text-[9px]">
+                        <th className="py-1 px-2 border-r border-slate-400 w-[15%]">Date</th>
+                        <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Description</th>
+                        <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Remarks</th>
+                        <th className="py-1 px-2 text-right w-[15%]">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredExpensesList.map((exp) => (
+                        <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="py-0.5 px-2 border-r border-slate-400 text-gray-500">{new Date(exp.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td>
+                          <td className="py-0.5 px-2 border-r border-slate-400 font-medium">{exp.description}</td>
+                          <td className="py-0.5 px-2 border-r border-slate-400 text-gray-550">{exp.remarks || '-'}</td>
+                          <td className="py-0.5 px-2 text-right font-semibold text-red-600">{exp.amount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold border-t border-gray-350 text-[9px] text-gray-900">
+                        <td colSpan={3} className="py-1 px-2 border-r border-slate-400 text-center uppercase tracking-wider">Total</td>
+                        <td className="py-1 px-2 text-right text-red-600 font-bold">{filteredExpenses}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+
               <div className="border-t-2 border-slate-900 pt-4 mt-6">
-                <div className="grid grid-cols-5 gap-2 text-center text-xs font-semibold">
-                  <div className="bg-gray-100 p-2 rounded border border-gray-300">
+                <div className="flex flex-row gap-2 text-center text-xs font-semibold w-full">
+                  <div className="bg-gray-100 p-2 rounded border border-gray-300 flex-1">
                     <span className="text-gray-500 block text-[10px] uppercase">Cash / Online</span>
-                    <span className="text-sm font-bold text-gray-900">Rs {totals.cash.toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</span>
+                    <span className="text-sm font-bold text-gray-900">Rs {totals.cash} / {totals.online}</span>
                   </div>
-                  <div className="bg-gray-100 p-2 rounded border border-gray-300">
-                    <span className="text-gray-500 block text-[10px] uppercase">Total Sale</span>
-                    <span className="text-sm font-bold text-gray-900">Rs {totals.sale.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="bg-gray-100 p-2 rounded border border-gray-300">
+                  <div className="bg-gray-100 p-2 rounded border border-gray-300 flex-1">
                     <span className="text-gray-500 block text-[10px] uppercase">Total Profit</span>
-                    <span className={`text-sm font-bold ${(totals.profit - filteredExpenses) >= 0 ? 'text-green-700' : 'text-red-650'}`}>Rs {(totals.profit - filteredExpenses).toLocaleString('en-IN')}</span>
+                    <span className={`text-sm font-bold ${(totals.profit - filteredExpenses) >= 0 ? 'text-green-700' : 'text-red-655'}`}>Rs {totals.profit - filteredExpenses}</span>
                   </div>
-                  <div className="bg-gray-100 p-2 rounded border border-gray-300">
+                  <div className="bg-gray-100 p-2 rounded border border-gray-300 flex-1">
                     <span className="text-gray-500 block text-[10px] uppercase">Expenses</span>
-                    <span className="text-sm font-bold text-red-600">Rs {filteredExpenses.toLocaleString('en-IN')}</span>
+                    <span className="text-sm font-bold text-red-600">Rs {filteredExpenses}</span>
                   </div>
-                  <div className="bg-slate-900 text-white p-2 rounded">
+                  <div className="bg-slate-900 text-white p-2 rounded flex-1">
                     <span className="text-slate-400 block text-[10px] uppercase">Grand Total</span>
-                    <span className="text-sm font-bold text-green-400">Rs {((totals.cash - filteredExpenses) + totals.online).toLocaleString('en-IN')}</span>
+                    <span className="text-sm font-bold text-green-400">Rs {(totals.cash - filteredExpenses) + totals.online}</span>
                   </div>
                 </div>
               </div>
@@ -1378,7 +1911,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                 </tbody>
               </table>
 
-              {receiptSale.remarks && (
+              {receiptSale.remarks && receiptSale.remarks !== 'Customer Sale (Dummy)' && (
                 <div className="bg-slate-50 border border-gray-200 rounded-lg p-4 mb-6">
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Remarks / Notes</h3>
                   <p className="text-sm text-gray-750 font-medium leading-relaxed">{receiptSale.remarks}</p>

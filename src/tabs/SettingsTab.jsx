@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 
 export default function SettingsTab({ data, saveData, activeBranch, fullDbData, saveFullDbData }) {
@@ -19,6 +19,11 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
   const [showClearDataModal, setShowClearDataModal] = useState(false);
   const [clearDataPasswordInput, setClearDataPasswordInput] = useState('');
   const [clearDataError, setClearDataError] = useState('');
+  
+  // Category Rename States
+  const [editingCatIndex, setEditingCatIndex] = useState(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [categoryRenames, setCategoryRenames] = useState({});
 
   useEffect(() => {
     setLocalCategories([...(data.categories || [])]);
@@ -65,13 +70,54 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
     setLocalCategories(newCats);
   };
 
+  const handleSaveCategoryName = (index) => {
+    const oldName = localCategories[index];
+    const newName = editingCatName.trim();
+    if (!newName) return;
+    if (newName === oldName) {
+      setEditingCatIndex(null);
+      return;
+    }
+    if (localCategories.includes(newName)) {
+      alert(`Category "${newName}" already exists!`);
+      return;
+    }
+
+    setCategoryRenames(prev => {
+      const originalName = Object.keys(prev).find(key => prev[key] === oldName) || oldName;
+      return {
+        ...prev,
+        [originalName]: newName
+      };
+    });
+
+    const newCats = [...localCategories];
+    newCats[index] = newName;
+    setLocalCategories(newCats);
+    setEditingCatIndex(null);
+  };
+
   const handleSavePositions = async () => {
-    saveData({ ...data, categories: localCategories });
+    const updatedStock = (data.stock || []).map(item => {
+      if (item.category && categoryRenames[item.category]) {
+        return { ...item, category: categoryRenames[item.category] };
+      }
+      return item;
+    });
+
+    saveData({ 
+      ...data, 
+      categories: localCategories,
+      stock: updatedStock
+    });
+    setCategoryRenames({});
     await alert('Categories saved successfully!');
   };
 
   const closeCategoryModal = () => {
     setLocalCategories([...(data.categories || [])]);
+    setCategoryRenames({});
+    setEditingCatIndex(null);
     setShowCategoryModal(false);
   };
 
@@ -534,17 +580,58 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                             <ChevronDown className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <span className="font-medium text-gray-800">
-                          {cat} <span className="text-xs text-gray-400 font-normal ml-1">({(data.stock || []).filter(item => item.category === cat).length} items)</span>
-                        </span>
+                        {editingCatIndex === i ? (
+                          <div className="flex items-center gap-1.5">
+                            <input 
+                              type="text" 
+                              className="border border-gray-300 rounded px-2 py-0.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                              value={editingCatName}
+                              onChange={e => setEditingCatName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleSaveCategoryName(i);
+                                if (e.key === 'Escape') setEditingCatIndex(null);
+                              }}
+                              autoFocus
+                            />
+                            <button 
+                              onClick={() => handleSaveCategoryName(i)}
+                              className="text-green-600 hover:bg-green-50 p-0.5 rounded transition"
+                              title="Save Name"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                            <button 
+                              onClick={() => setEditingCatIndex(null)}
+                              className="text-red-500 hover:bg-red-50 p-0.5 rounded transition"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="font-medium text-gray-800">
+                            {cat} <span className="text-xs text-gray-400 font-normal ml-1">({(data.stock || []).filter(item => item.category === cat).length} items)</span>
+                          </span>
+                        )}
                       </div>
-                      <button 
-                        onClick={() => handleRemoveCategory(cat)}
-                        className="text-gray-400 hover:text-red-500 p-1 hover:bg-red-50 rounded transition"
-                        title="Remove category"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {editingCatIndex !== i && (
+                        <div className="flex items-center gap-1.5">
+                          <button 
+                            onClick={() => { setEditingCatIndex(i); setEditingCatName(cat); }}
+                            className="text-blue-500 hover:text-blue-700 p-1 hover:bg-blue-50 rounded transition"
+                            title="Rename category"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleRemoveCategory(cat)}
+                            className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition"
+                            title="Remove category"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

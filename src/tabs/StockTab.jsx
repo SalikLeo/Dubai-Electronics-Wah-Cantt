@@ -1561,63 +1561,83 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 });
               });
 
-              // Balance pagination
-              const maxRowsPerPage = 170;
-              const maxRowsPerColumn = 85;
+              // Calculate grand totals across all categories
+              const grandTotals = allRows.filter(r => r.type === 'total').reduce((acc, r) => {
+                acc.x_b += r.catTotals.x_b;
+                acc.in += r.catTotals.in;
+                acc.tb += r.catTotals.tb;
+                acc.sale += r.catTotals.sale;
+                acc.blnc += r.catTotals.blnc;
+                return acc;
+              }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: printTotalValue });
+
+              allRows.push({
+                type: 'grand_total',
+                totals: grandTotals
+              });
+
+              // Pagination: Fill left column first, then right column
+              const maxRowsPerColumn = 50;
+              const maxRowsPerPage = maxRowsPerColumn * 2;
               const pages = [];
               let tempRows = [...allRows];
 
               while (tempRows.length > 0) {
-                if (tempRows.length <= maxRowsPerPage) {
-                  pages.push({
-                    left: tempRows.slice(0, maxRowsPerColumn),
-                    right: tempRows.slice(maxRowsPerColumn)
-                  });
-                  break;
-                } else {
-                  pages.push({
-                    left: tempRows.slice(0, maxRowsPerColumn),
-                    right: tempRows.slice(maxRowsPerColumn, maxRowsPerPage)
-                  });
-                  tempRows = tempRows.slice(maxRowsPerPage);
-                }
+                pages.push({
+                  left: tempRows.slice(0, maxRowsPerColumn),
+                  right: tempRows.slice(maxRowsPerColumn, maxRowsPerPage)
+                });
+                tempRows = tempRows.slice(maxRowsPerPage);
               }
 
               const renderPrintRow = (row, i) => {
                 if (row.type === 'header') {
                   return (
-                    <tr key={`h-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-gray-300">
-                      <td colSpan={9} className="py-0.5 px-0.5 text-slate-900 uppercase text-[6.5px] truncate">
+                    <tr key={`h-${row.categoryName}-${i}`} className="bg-slate-400 font-bold border-b border-black" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                      <td colSpan={8} className="py-1 px-0.5 text-black uppercase text-[10px] truncate">
                         {row.categoryName} ({row.count} items)
                       </td>
                     </tr>
                   );
                 } else if (row.type === 'item') {
                   return (
-                    <tr key={`item-${row.id}-${i}`} className="border-b border-gray-200 leading-none">
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-gray-500 text-[6.5px]">{row.index}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 font-medium text-[6.5px] truncate max-w-[114px]" title={row.model}>{row.model}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.x_b}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.inQty}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-semibold text-[6.5px]">{row.tb}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-[6.5px]">{row.saleQty}</td>
-                      <td className={`py-0 px-0.5 border-r border-gray-200 text-center font-bold text-[6.5px] ${row.blnc > 0 ? 'text-green-700' : 'text-red-650'}`}>{row.blnc}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-right text-black text-[6.5px]">{row.ntd.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
-                      <td className="py-0 px-0.5 text-right text-black text-[6.5px]">{(row.blnc * row.ntd).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                    <tr key={`item-${row.id}-${i}`} className="border-b border-black leading-none font-medium" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+                      <td className="py-1 px-0.5 border-r border-black font-semibold text-[9px]" title={row.model}>
+                        <div className="truncate w-[96px] overflow-hidden">{row.model}</div>
+                      </td>
+                      <td className="py-1 px-0.5 border-r border-black text-center text-[9px]">{row.x_b}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center text-[9px] ${row.inQty > 0 ? 'bg-slate-400 text-black font-bold' : ''}`} style={row.inQty > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.inQty}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-center font-semibold text-[9px]">{row.tb}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center text-[9px] ${row.saleQty > 0 ? 'bg-slate-400 text-black font-bold' : ''}`} style={row.saleQty > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.saleQty}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[9px] ${row.blnc > 0 ? 'text-green-700' : 'text-red-650'}`}>{row.blnc}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-right text-black text-[9px]">{row.ntd.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                      <td className="py-1 px-0.5 text-right text-black text-[9px]">{(row.blnc * row.ntd).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                     </tr>
                   );
                 } else if (row.type === 'total') {
                   return (
-                    <tr key={`t-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-gray-300 font-sans leading-none">
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center text-gray-500 font-semibold text-[6.5px]">-</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 uppercase text-slate-800 font-bold text-[6.5px]">Total</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.x_b}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.in}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.tb}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-center font-bold text-slate-800 text-[6.5px]">{row.catTotals.sale}</td>
-                      <td className={`py-0 px-0.5 border-r border-gray-200 text-center font-bold ${row.catTotals.blnc > 0 ? 'text-green-700' : 'text-red-650'} text-[6.5px]`}>{row.catTotals.blnc}</td>
-                      <td className="py-0 px-0.5 border-r border-gray-200 text-right font-bold text-slate-800 text-[6.5px]">-</td>
-                      <td className="py-0 px-0.5 text-right font-bold text-black text-[6.5px]">{row.catTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                    <tr key={`t-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-black font-sans leading-none">
+                      <td className="py-1 px-0.5 border-r border-black uppercase text-slate-800 font-bold text-[8px]">Total</td>
+                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[8px]">{row.catTotals.x_b}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[8px] ${row.catTotals.in > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.in > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.in}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[8px]">{row.catTotals.tb}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[8px] ${row.catTotals.sale > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.sale > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.sale}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold ${row.catTotals.blnc > 0 ? 'text-green-700' : 'text-red-650'} text-[8px]`}>{row.catTotals.blnc}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-right font-bold text-slate-800 text-[8px]">-</td>
+                      <td className="py-1 px-0.5 text-right font-bold text-black text-[8px]">{row.catTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                    </tr>
+                  );
+                } else if (row.type === 'grand_total') {
+                  return (
+                    <tr key={`gt-${i}`} className="bg-slate-900 text-white font-bold border-b border-black font-sans leading-none" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 uppercase text-white font-bold text-[6px]">Grand Total</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[6px]">{row.totals.x_b}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[6px] ${row.totals.in > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.in}</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[6px]">{row.totals.tb}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[6px] ${row.totals.sale > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.sale}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold ${row.totals.blnc > 0 ? 'text-green-400' : 'text-red-400'} text-[6px]`}>{row.totals.blnc}</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-right font-bold text-white text-[6px]">-</td>
+                      <td className="py-1.5 px-0.5 text-right font-bold text-green-400 text-[6px]">{row.totals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                     </tr>
                   );
                 }
@@ -1627,17 +1647,16 @@ export default function StockTab({ data, saveData, activeBranch }) {
               const renderTable = (rows) => {
                 if (!rows || rows.length === 0) {
                   return (
-                    <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6" style={{ tableLayout: 'fixed', visibility: 'hidden' }}>
+                    <table className="w-full text-left text-xs border-collapse border border-black mb-3 print:mb-1" style={{ tableLayout: 'fixed', visibility: 'hidden' }}>
                       <thead>
-                        <tr className="bg-white text-black border-b-2 border-slate-800">
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[12px] text-[6px] font-bold">#</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-[6.5px] w-[114px] font-bold uppercase tracking-wider">Model</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">In</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Sale</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Blnc</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
+                        <tr className="bg-white text-black border-b-2 border-black">
+                           <th className="py-1.5 px-0.5 border-r border-black text-[6.5px] w-[111px] font-bold uppercase tracking-wider">Model</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">In</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">Sale</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">Blnc</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
                            <th className="py-1.5 px-0.5 text-right w-[66px] text-[6.5px] font-bold uppercase tracking-wider">Total</th>
                         </tr>
                       </thead>
@@ -1645,17 +1664,16 @@ export default function StockTab({ data, saveData, activeBranch }) {
                   );
                 }
                 return (
-                    <table className="w-full text-left text-xs border-collapse border border-gray-300 mb-6" style={{ tableLayout: 'fixed' }}>
+                    <table className="w-full text-left text-xs border-collapse border border-black mb-3 print:mb-1" style={{ tableLayout: 'fixed' }}>
                       <thead>
-                        <tr className="bg-white text-black border-b-2 border-slate-800">
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[12px] text-[6px] font-bold">#</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-[6.5px] w-[114px] font-bold uppercase tracking-wider">Model</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">In</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Sale</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-center w-[15px] text-[5.5px] font-bold uppercase tracking-wider">Blnc</th>
-                           <th className="py-1.5 px-0.5 border-r border-slate-300 text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
+                        <tr className="bg-white text-black border-b-2 border-black">
+                           <th className="py-1.5 px-0.5 border-r border-black text-[6.5px] w-[111px] font-bold uppercase tracking-wider">Model</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold uppercase tracking-wider">XB</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">In</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold uppercase tracking-wider">TB</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">Sale</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-center w-[18px] text-[5.5px] font-bold tracking-wider">Blnc</th>
+                           <th className="py-1.5 px-0.5 border-r border-black text-right w-[48px] text-[6.5px] font-bold uppercase tracking-wider">NTD</th>
                            <th className="py-1.5 px-0.5 text-right w-[66px] text-[6.5px] font-bold uppercase tracking-wider">Total</th>
                         </tr>
                       </thead>
@@ -1668,6 +1686,13 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
               return (
                 <div className="w-full flex flex-col items-center gap-6 print:block print:w-full print:bg-white print:p-0">
+                  <style>{`
+                    @media print {
+                      @page {
+                        margin: 0;
+                      }
+                    }
+                  `}</style>
                   {pages.map((page, pageIdx) => (
                     <div 
                       key={pageIdx} 
@@ -1679,7 +1704,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                       }}
                     >
                       {/* Header */}
-                      <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
+                      <div className="border-b-2 border-slate-900 pb-4 mb-6 print:pb-1 print:mb-2 flex justify-between items-start">
                         <div>
                           <h1 className="text-2xl font-bold text-slate-900 tracking-wide">DUBAI ELECTRONICS</h1>
                           <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
@@ -1703,20 +1728,6 @@ export default function StockTab({ data, saveData, activeBranch }) {
                         </div>
                       </div>
 
-                      {/* Footer on Last Page */}
-                      {pageIdx === pages.length - 1 && (
-                        <div className="border-t-2 border-slate-900 pt-4 mt-6">
-                          <div className="flex justify-between items-center bg-slate-900 text-white p-4 rounded">
-                            <div>
-                              <h3 className="text-xs uppercase font-bold text-slate-400">Total Stock Value</h3>
-                              <p className="text-[10px] text-slate-400">Cost Price (NTD) × Available Balance</p>
-                            </div>
-                            <div className="text-xl font-bold text-green-400">
-                              {printTotalValue.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

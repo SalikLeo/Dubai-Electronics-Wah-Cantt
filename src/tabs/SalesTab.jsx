@@ -1755,33 +1755,35 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
               {filteredExpensesList.length > 0 && (
                 <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
-                  <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1.5">Expenses List</h3>
-                  <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-slate-100 text-black border-b border-gray-300 font-bold uppercase tracking-wider text-[9px]">
-                        <th className="py-1 px-2 border-r border-slate-400 w-[15%]">Date</th>
-                        <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Description</th>
-                        <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Remarks</th>
-                        <th className="py-1 px-2 text-right w-[15%]">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredExpensesList.map((exp) => (
-                        <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="py-0.5 px-2 border-r border-slate-400 text-gray-500">{new Date(exp.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td>
-                          <td className="py-0.5 px-2 border-r border-slate-400 font-medium">{exp.description}</td>
-                          <td className="py-0.5 px-2 border-r border-slate-400 text-gray-550">{exp.remarks || '-'}</td>
-                          <td className="py-0.5 px-2 text-right font-semibold text-red-600">{exp.amount}</td>
+                  <div className="w-[40%]">
+                    <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1.5">Expenses List</h3>
+                    <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
+                      <thead>
+                        <tr className="bg-slate-100 text-black border-b border-gray-300 font-bold uppercase tracking-wider text-[9px]">
+                          <th className="py-1 px-2 border-r border-slate-400 w-[15%]">Date</th>
+                          <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Description</th>
+                          <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Remarks</th>
+                          <th className="py-1 px-2 text-right w-[15%]">Amount</th>
                         </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 font-bold border-t border-gray-350 text-[9px] text-gray-900">
-                        <td colSpan={3} className="py-1 px-2 border-r border-slate-400 text-center uppercase tracking-wider">Total</td>
-                        <td className="py-1 px-2 text-right text-red-600 font-bold">{filteredExpenses}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredExpensesList.map((exp) => (
+                          <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="py-0.5 px-2 border-r border-slate-400 text-gray-500">{new Date(exp.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td>
+                            <td className="py-0.5 px-2 border-r border-slate-400 font-medium">{exp.description}</td>
+                            <td className="py-0.5 px-2 border-r border-slate-400 text-gray-550">{exp.remarks || '-'}</td>
+                            <td className="py-0.5 px-2 text-right font-semibold text-red-600">{exp.amount}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-100 font-bold border-t border-gray-350 text-[9px] text-gray-900">
+                          <td colSpan={3} className="py-1 px-2 border-r border-slate-400 text-center uppercase tracking-wider">Total</td>
+                          <td className="py-1 px-2 text-right text-red-600 font-bold">{filteredExpenses}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
                 </div>
               )}
 

@@ -984,7 +984,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
       <div className="flex flex-row gap-3 print-hidden w-full">
         <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Cash / Online</p>
-          <p className="text-sm font-bold text-gray-900 truncate">Rs {totals.cash.toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</p>
+          <p className="text-sm font-bold text-gray-900 truncate">Rs {(totals.cash - filteredExpenses).toLocaleString('en-IN')} / {totals.online.toLocaleString('en-IN')}</p>
         </div>
         <div className="bg-white py-2 px-3 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-center flex-1">
           <p className="text-[10px] text-gray-500 font-semibold uppercase">Total Profit</p>
@@ -1626,6 +1626,10 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                 size: A4 landscape !important;
                 margin: 10mm !important;
               }
+              .printable-area {
+                box-shadow: none !important;
+                border: none !important;
+              }
             }
           `}} />
           <div className="bg-slate-900 text-white rounded-t-xl w-full max-w-4xl px-6 py-3 flex justify-between items-center shadow-lg print-hidden" onClick={e => e.stopPropagation()}>
@@ -1650,7 +1654,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
           </div>
 
           <div className="bg-slate-800 w-full max-w-4xl flex-1 overflow-auto p-6 rounded-b-xl flex justify-center items-start print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
-            <div className="bg-white text-black p-8 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area flex flex-col justify-between">
+            <div className="bg-white text-black p-8 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area print:border-none print:shadow-none print:p-0 print:my-0 flex flex-col justify-between">
               <div>
                 <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                   <div>
@@ -1755,30 +1759,26 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
               {filteredExpensesList.length > 0 && (
                 <div className="mt-4 border-t border-dashed border-slate-300 pt-3">
-                  <div className="w-[40%]">
+                  <div className="w-[30%]">
                     <h3 className="text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1.5">Expenses List</h3>
                     <table className="w-full text-left text-[9px] border-collapse border border-gray-300">
                       <thead>
                         <tr className="bg-slate-100 text-black border-b border-gray-300 font-bold uppercase tracking-wider text-[9px]">
-                          <th className="py-1 px-2 border-r border-slate-400 w-[15%]">Date</th>
-                          <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Description</th>
-                          <th className="py-1 px-2 border-r border-slate-400 w-[35%]">Remarks</th>
-                          <th className="py-1 px-2 text-right w-[15%]">Amount</th>
+                          <th className="py-1 px-2 border-r border-slate-400 w-[70%]">Description</th>
+                          <th className="py-1 px-2 text-right w-[30%]">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredExpensesList.map((exp) => (
                           <tr key={exp.id} className="border-b border-gray-200 hover:bg-gray-50">
-                            <td className="py-0.5 px-2 border-r border-slate-400 text-gray-500">{new Date(exp.date).toLocaleDateString([], { month: 'short', day: 'numeric' })}</td>
                             <td className="py-0.5 px-2 border-r border-slate-400 font-medium">{exp.description}</td>
-                            <td className="py-0.5 px-2 border-r border-slate-400 text-gray-550">{exp.remarks || '-'}</td>
                             <td className="py-0.5 px-2 text-right font-semibold text-red-600">{exp.amount}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="bg-slate-100 font-bold border-t border-gray-350 text-[9px] text-gray-900">
-                          <td colSpan={3} className="py-1 px-2 border-r border-slate-400 text-center uppercase tracking-wider">Total</td>
+                          <td colSpan={1} className="py-1 px-2 border-r border-slate-400 text-center uppercase tracking-wider">Total</td>
                           <td className="py-1 px-2 text-right text-red-600 font-bold">{filteredExpenses}</td>
                         </tr>
                       </tfoot>
@@ -1791,7 +1791,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                 <div className="flex flex-row gap-2 text-center text-xs font-semibold w-full">
                   <div className="bg-gray-100 p-2 rounded border border-gray-300 flex-1">
                     <span className="text-gray-500 block text-[10px] uppercase">Cash / Online</span>
-                    <span className="text-sm font-bold text-gray-900">Rs {totals.cash} / {totals.online}</span>
+                    <span className="text-sm font-bold text-gray-900">Rs {totals.cash - filteredExpenses} / {totals.online}</span>
                   </div>
                   <div className="bg-gray-100 p-2 rounded border border-gray-300 flex-1">
                     <span className="text-gray-500 block text-[10px] uppercase">Total Profit</span>
@@ -1837,8 +1837,8 @@ export default function SalesTab({ data, saveData, activeBranch }) {
           </div>
         </div>
 
-        <div className="bg-slate-850 w-full max-w-4xl flex-1 overflow-auto p-6 rounded-b-xl flex justify-center items-start print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
-          <div className="bg-white text-black p-10 shadow-2xl border w-full max-w-[210mm] min-h-[297mm] font-sans printable-area flex flex-col justify-between">
+        <div className="bg-white w-full max-w-4xl flex-1 overflow-auto p-0 rounded-b-xl flex justify-center items-start print:static print:block print:w-full print:max-w-none print:overflow-visible print:p-0 print:bg-white print:border-none print:shadow-none" onClick={e => e.stopPropagation()}>
+          <div className="bg-white text-black p-0 w-full max-w-[210mm] min-h-[297mm] font-sans printable-area flex flex-col justify-between">
             <div>
               <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start">
                 <div>
@@ -1862,7 +1862,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
               </div>
 
               {(receiptSale.customerName || receiptSale.customerPhone) && (
-                <div className="bg-slate-50 border border-gray-200 rounded-lg p-3 mb-6">
+                <div className="mb-6">
                   <p className="text-sm font-sans text-gray-800">
                     <span className="font-bold text-gray-850">Customer: </span>
                     <span>{receiptSale.customerName || '-'}</span>
@@ -1914,7 +1914,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
               </table>
 
               {receiptSale.remarks && receiptSale.remarks !== 'Customer Sale (Dummy)' && (
-                <div className="bg-slate-50 border border-gray-200 rounded-lg p-4 mb-6">
+                <div className="mb-6">
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Remarks / Notes</h3>
                   <p className="text-sm text-gray-750 font-medium leading-relaxed">{receiptSale.remarks}</p>
                 </div>

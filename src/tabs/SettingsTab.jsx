@@ -1,23 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit, Share2 } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
-
-const getItemAllTimeStock = (item, branchData) => {
-  if (!item) return 0;
-  const stockInQty = (branchData.history || [])
-    .filter(h => h.stockId === item.id && h.type === 'Stock In')
-    .reduce((sum, h) => sum + Number(h.qty || 0), 0);
-  
-  const salesQty = (branchData.sales || []).reduce((sum, s) => {
-    const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
-    const matchedItem = items.find(si => si.stockId === item.id);
-    return sum + (matchedItem ? Number(matchedItem.qty || 0) : 0);
-  }, 0);
-
-  const baseXB = Number(item.x_b || 0);
-  return Math.max(0, baseXB + stockInQty - salesQty);
-};
-
 export default function SettingsTab({ data, saveData, activeBranch, fullDbData, saveFullDbData }) {
   const { alert, confirm } = useDialog();
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
@@ -352,7 +335,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
     if (selectedShareCategories.length === 0 || selectedShareBranches.length === 0) return;
     
     const isConfirmed = await confirm(
-      `Are you sure you want to share stock in selected categories (${selectedShareCategories.join(', ')}) to branches (${selectedShareBranches.join(', ')})? This will replace items in these categories there.`
+      `Are you sure you want to share stock items of selected categories (${selectedShareCategories.join(', ')}) to branches (${selectedShareBranches.join(', ')})? This will replace items in these categories there, starting their stock counts at 0.`
     );
     if (!isConfirmed) return;
 
@@ -386,39 +369,21 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
         }
       });
 
-      // 3. For each source item, clone it and insert into target stock, plus add history transaction
+      // 3. For each source item, clone it with zero quantities and insert into target stock
       sourceItems.forEach(item => {
-        // Calculate all-time stock balance in source branch for this item
-        const sourceBlnc = getItemAllTimeStock(item, sourceBranchData);
-
         // Generate clean ID for target branch copy
         const newId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
         const copiedItem = {
           id: newId,
           model: item.model,
           category: item.category,
-          x_b: sourceBlnc, // current physical stock becomes initial stock in the target branch
+          x_b: 0,
           in: 0,
           sale: 0,
           ntd: Number(item.ntd || 0),
         };
 
         targetBranch.stock.push(copiedItem);
-
-        // Add 'Initial Stock' transaction to target branch history
-        const newTx = {
-          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9),
-          date: new Date().toISOString(),
-          stockId: newId,
-          type: 'Initial Stock',
-          qty: sourceBlnc,
-          details: `Cost: Rs ${copiedItem.ntd.toLocaleString('en-IN')} (NTD) - Copied from ${activeBranch} branch`,
-          prevNtd: 0,
-          newNtd: copiedItem.ntd
-        };
-
-        if (!targetBranch.history) targetBranch.history = [];
-        targetBranch.history.push(newTx);
       });
     });
 
@@ -868,24 +833,28 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                     {data.categories.map(cat => {
                       const itemCount = (data.stock || []).filter(item => item.category === cat).length;
                       return (
-                        <label key={cat} className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200">
+                        <div 
+                          key={cat} 
+                          onClick={() => {
+                            if (selectedShareCategories.includes(cat)) {
+                              setSelectedShareCategories(selectedShareCategories.filter(c => c !== cat));
+                            } else {
+                              setSelectedShareCategories([...selectedShareCategories, cat]);
+                            }
+                          }}
+                          className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200"
+                        >
                           <input 
                             type="checkbox" 
                             className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
                             checked={selectedShareCategories.includes(cat)}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setSelectedShareCategories([...selectedShareCategories, cat]);
-                              } else {
-                                setSelectedShareCategories(selectedShareCategories.filter(c => c !== cat));
-                              }
-                            }}
+                            readOnly
                           />
                           <div className="flex-1 flex justify-between items-center">
                             <span className="text-sm font-medium text-gray-800">{cat}</span>
                             <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full font-semibold">{itemCount} items</span>
                           </div>
-                        </label>
+                        </div>
                       );
                     })}
                     {data.categories.length === 0 && (
@@ -898,7 +867,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                   <button 
                     type="button" 
                     onClick={() => setShowShareStockModal(false)} 
-                    className="px-4 py-2 text-gray-655 hover:bg-gray-100 rounded font-semibold text-sm transition cursor-pointer"
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded font-semibold text-sm transition cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -907,7 +876,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                     disabled={selectedShareCategories.length === 0}
                     onClick={() => setShareStep(2)} 
                     className={`px-5 py-2 text-white rounded font-bold text-sm shadow-sm transition cursor-pointer ${
-                      selectedShareCategories.length === 0 ? 'bg-indigo-400 cursor-not-allowed opacity-60' : 'bg-indigo-650 hover:bg-indigo-700'
+                      selectedShareCategories.length === 0 ? 'bg-indigo-400 cursor-not-allowed opacity-60' : 'bg-indigo-600 hover:bg-indigo-700'
                     }`}
                   >
                     Next
@@ -940,21 +909,25 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                     {Object.keys(fullDbData.branches)
                       .filter(bName => bName !== activeBranch)
                       .map(bName => (
-                        <label key={bName} className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200">
+                        <div 
+                          key={bName} 
+                          onClick={() => {
+                            if (selectedShareBranches.includes(bName)) {
+                              setSelectedShareBranches(selectedShareBranches.filter(b => b !== bName));
+                            } else {
+                              setSelectedShareBranches([...selectedShareBranches, bName]);
+                            }
+                          }}
+                          className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200"
+                        >
                           <input 
                             type="checkbox" 
                             className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
                             checked={selectedShareBranches.includes(bName)}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setSelectedShareBranches([...selectedShareBranches, bName]);
-                              } else {
-                                setSelectedShareBranches(selectedShareBranches.filter(b => b !== bName));
-                              }
-                            }}
+                            readOnly
                           />
                           <span className="text-sm font-semibold text-gray-800">{bName} Branch</span>
-                        </label>
+                        </div>
                       ))}
                     {Object.keys(fullDbData.branches).filter(bName => bName !== activeBranch).length === 0 && (
                       <div className="text-sm text-gray-500 text-center py-4">No other branches found.</div>
@@ -966,7 +939,7 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                   <button 
                     type="button" 
                     onClick={() => setShareStep(1)} 
-                    className="px-4 py-2 text-gray-655 hover:bg-gray-150 rounded font-semibold text-sm transition cursor-pointer"
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-150 rounded font-semibold text-sm transition cursor-pointer"
                   >
                     Back
                   </button>

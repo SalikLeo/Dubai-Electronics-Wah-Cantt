@@ -1,6 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit } from 'lucide-react';
+import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit, Share2 } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+
+const getItemAllTimeStock = (item, branchData) => {
+  if (!item) return 0;
+  const stockInQty = (branchData.history || [])
+    .filter(h => h.stockId === item.id && h.type === 'Stock In')
+    .reduce((sum, h) => sum + Number(h.qty || 0), 0);
+  
+  const salesQty = (branchData.sales || []).reduce((sum, s) => {
+    const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+    const matchedItem = items.find(si => si.stockId === item.id);
+    return sum + (matchedItem ? Number(matchedItem.qty || 0) : 0);
+  }, 0);
+
+  const baseXB = Number(item.x_b || 0);
+  return Math.max(0, baseXB + stockInQty - salesQty);
+};
 
 export default function SettingsTab({ data, saveData, activeBranch, fullDbData, saveFullDbData }) {
   const { alert, confirm } = useDialog();
@@ -24,6 +40,11 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
   const [editingCatIndex, setEditingCatIndex] = useState(null);
   const [editingCatName, setEditingCatName] = useState('');
   const [categoryRenames, setCategoryRenames] = useState({});
+
+  const [showShareStockModal, setShowShareStockModal] = useState(false);
+  const [shareStep, setShareStep] = useState(1);
+  const [selectedShareCategories, setSelectedShareCategories] = useState([]);
+  const [selectedShareBranches, setSelectedShareBranches] = useState([]);
 
   useEffect(() => {
     setLocalCategories([...(data.categories || [])]);
@@ -327,6 +348,92 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
     }
   };
 
+  const handleExecuteShare = async () => {
+    if (selectedShareCategories.length === 0 || selectedShareBranches.length === 0) return;
+    
+    const isConfirmed = await confirm(
+      `Are you sure you want to share stock in selected categories (${selectedShareCategories.join(', ')}) to branches (${selectedShareBranches.join(', ')})? This will replace items in these categories there.`
+    );
+    if (!isConfirmed) return;
+
+    // Create a copy of the database data to modify
+    const updatedDb = JSON.parse(JSON.stringify(fullDbData));
+
+    // Get current branch source data
+    const sourceBranchData = updatedDb.branches[activeBranch];
+    if (!sourceBranchData) return;
+
+    // Get all items in selected categories in source branch
+    const sourceItems = sourceBranchData.stock.filter(item => 
+      selectedShareCategories.includes(item.category)
+    );
+
+    // For each target branch, perform the replacement
+    selectedShareBranches.forEach(branchName => {
+      const targetBranch = updatedDb.branches[branchName];
+      if (!targetBranch) return;
+
+      // 1. Remove all items belonging to selected categories from target stock
+      targetBranch.stock = (targetBranch.stock || []).filter(item => 
+        !selectedShareCategories.includes(item.category)
+      );
+
+      // 2. Ensure categories exist in target branch categories array
+      if (!targetBranch.categories) targetBranch.categories = [];
+      selectedShareCategories.forEach(cat => {
+        if (!targetBranch.categories.includes(cat)) {
+          targetBranch.categories.push(cat);
+        }
+      });
+
+      // 3. For each source item, clone it and insert into target stock, plus add history transaction
+      sourceItems.forEach(item => {
+        // Calculate all-time stock balance in source branch for this item
+        const sourceBlnc = getItemAllTimeStock(item, sourceBranchData);
+
+        // Generate clean ID for target branch copy
+        const newId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+        const copiedItem = {
+          id: newId,
+          model: item.model,
+          category: item.category,
+          x_b: sourceBlnc, // current physical stock becomes initial stock in the target branch
+          in: 0,
+          sale: 0,
+          ntd: Number(item.ntd || 0),
+        };
+
+        targetBranch.stock.push(copiedItem);
+
+        // Add 'Initial Stock' transaction to target branch history
+        const newTx = {
+          id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9),
+          date: new Date().toISOString(),
+          stockId: newId,
+          type: 'Initial Stock',
+          qty: sourceBlnc,
+          details: `Cost: Rs ${copiedItem.ntd.toLocaleString('en-IN')} (NTD) - Copied from ${activeBranch} branch`,
+          prevNtd: 0,
+          newNtd: copiedItem.ntd
+        };
+
+        if (!targetBranch.history) targetBranch.history = [];
+        targetBranch.history.push(newTx);
+      });
+    });
+
+    // Save full database data
+    await saveFullDbData(updatedDb);
+
+    // Reset share states and close modal
+    setShowShareStockModal(false);
+    setSelectedShareCategories([]);
+    setSelectedShareBranches([]);
+    setShareStep(1);
+
+    await alert(`Successfully shared stock items of selected categories to target branches!`);
+  };
+
   return (
     <div className="h-full flex flex-col p-6">
       <div className="mb-4">
@@ -481,6 +588,31 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
             </div>
           </div>
         </div>
+
+        {/* Share Stock Across Branches */}
+        {fullDbData && saveFullDbData && (
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-indigo-600" /> Share Stock Across Branches
+            </h2>
+            <p className="text-gray-600 text-sm mb-4">
+              Copy and sync stock items from <strong>{activeBranch} Branch</strong> to other branches. You can choose which categories to share, and overwrite target categories.
+            </p>
+            <div>
+              <button 
+                onClick={() => {
+                  setSelectedShareCategories([]);
+                  setSelectedShareBranches([]);
+                  setShareStep(1);
+                  setShowShareStockModal(true);
+                }} 
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium shadow-sm transition text-sm cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" /> Share Stock
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Data Management */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
@@ -702,6 +834,155 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Stock Modal */}
+      {showShareStockModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowShareStockModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-indigo-600" />
+                Share Stock - Step {shareStep} of 2
+              </h2>
+              <button 
+                type="button" 
+                onClick={() => setShowShareStockModal(false)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {shareStep === 1 ? (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Select Categories to Share</h3>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Choose which stock categories from <strong>{activeBranch}</strong> you want to share with other branches.
+                  </p>
+                  
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3 flex flex-col gap-2 bg-slate-50">
+                    {data.categories.map(cat => {
+                      const itemCount = (data.stock || []).filter(item => item.category === cat).length;
+                      return (
+                        <label key={cat} className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                            checked={selectedShareCategories.includes(cat)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedShareCategories([...selectedShareCategories, cat]);
+                              } else {
+                                setSelectedShareCategories(selectedShareCategories.filter(c => c !== cat));
+                              }
+                            }}
+                          />
+                          <div className="flex-1 flex justify-between items-center">
+                            <span className="text-sm font-medium text-gray-800">{cat}</span>
+                            <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full font-semibold">{itemCount} items</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {data.categories.length === 0 && (
+                      <div className="text-sm text-gray-500 text-center py-4">No categories found in this branch.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end mt-2 border-t pt-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowShareStockModal(false)} 
+                    className="px-4 py-2 text-gray-655 hover:bg-gray-100 rounded font-semibold text-sm transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="button" 
+                    disabled={selectedShareCategories.length === 0}
+                    onClick={() => setShareStep(2)} 
+                    className={`px-5 py-2 text-white rounded font-bold text-sm shadow-sm transition cursor-pointer ${
+                      selectedShareCategories.length === 0 ? 'bg-indigo-400 cursor-not-allowed opacity-60' : 'bg-indigo-650 hover:bg-indigo-700'
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-1">Select Target Branches</h3>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Choose which branches to share the stock items of selected categories to.
+                  </p>
+                  
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] text-amber-800 mb-3 flex flex-col gap-1">
+                    <span className="font-bold flex items-center gap-1">
+                      ⚠️ WARNING: OVERWRITE WARNING
+                    </span>
+                    <span>
+                      Sharing will completely overwrite the stock items of the selected categories on the target branches:
+                    </span>
+                    <ul className="list-disc pl-4 font-semibold mt-1 flex flex-col gap-0.5">
+                      {selectedShareCategories.map(cat => (
+                        <li key={cat}>{cat}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg p-3 flex flex-col gap-2 bg-slate-50">
+                    {Object.keys(fullDbData.branches)
+                      .filter(bName => bName !== activeBranch)
+                      .map(bName => (
+                        <label key={bName} className="flex items-center gap-3 p-2 rounded hover:bg-white cursor-pointer select-none transition border border-transparent hover:border-gray-200">
+                          <input 
+                            type="checkbox" 
+                            className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
+                            checked={selectedShareBranches.includes(bName)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedShareBranches([...selectedShareBranches, bName]);
+                              } else {
+                                setSelectedShareBranches(selectedShareBranches.filter(b => b !== bName));
+                              }
+                            }}
+                          />
+                          <span className="text-sm font-semibold text-gray-800">{bName} Branch</span>
+                        </label>
+                      ))}
+                    {Object.keys(fullDbData.branches).filter(bName => bName !== activeBranch).length === 0 && (
+                      <div className="text-sm text-gray-500 text-center py-4">No other branches found.</div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 justify-end mt-2 border-t pt-3">
+                  <button 
+                    type="button" 
+                    onClick={() => setShareStep(1)} 
+                    className="px-4 py-2 text-gray-655 hover:bg-gray-150 rounded font-semibold text-sm transition cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button 
+                    type="button" 
+                    disabled={selectedShareBranches.length === 0}
+                    onClick={handleExecuteShare} 
+                    className={`px-5 py-2 text-white rounded font-bold text-sm shadow-sm transition cursor-pointer ${
+                      selectedShareBranches.length === 0 ? 'bg-emerald-400 cursor-not-allowed opacity-60' : 'bg-emerald-600 hover:bg-emerald-700'
+                    }`}
+                  >
+                    Share Stock
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

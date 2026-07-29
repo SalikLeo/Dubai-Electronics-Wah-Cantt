@@ -321,7 +321,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
-              <Route path="/stock" element={<StockTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
+              <Route path="/stock" element={<StockTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} fullDbData={dbData} saveFullDbData={saveFullDbData} />} />
               <Route path="/sales" element={<SalesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/purchases" element={<PurchasesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />
               <Route path="/expenses" element={<ExpensesTab key={activeBranch} data={data} saveData={saveData} activeBranch={activeBranch} />} />

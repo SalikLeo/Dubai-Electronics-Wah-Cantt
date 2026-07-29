@@ -141,7 +141,6 @@ export default function StockTab({ data, saveData, activeBranch }) {
   const [globalHistoryType, setGlobalHistoryType] = useState('sales');
   const [globalHistorySort, setGlobalHistorySort] = useState('latest');
   const [globalHistorySearch, setGlobalHistorySearch] = useState('');
-  
   const [stockSearch, setStockSearch] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);

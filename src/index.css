@@ -63,7 +63,34 @@ option {
     box-shadow: none !important;
     background-color: white !important;
   }
+
+  /* Force economy ink saving in print configuration */
+  .printable-area, 
+  .printable-area *, 
+  .printable-area tr, 
+  .printable-area th, 
+  .printable-area td, 
+  .printable-area tbody, 
+  .printable-area table {
+    -webkit-print-color-adjust: economy !important;
+    print-color-adjust: economy !important;
+  }
 }
+
+/* Force pure black and white for crisp printing on B&W printers (both onscreen preview and printed output) */
+.printable-area, 
+.printable-area *, 
+.printable-area tr, 
+.printable-area th, 
+.printable-area td, 
+.printable-area tbody, 
+.printable-area table {
+  background: white !important;
+  background-color: white !important;
+  color: black !important;
+  border-color: black !important;
+}
+
 
 /* Custom scrollbar for sidebar */
 .sidebar-scroll::-webkit-scrollbar {

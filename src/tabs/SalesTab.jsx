@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Plus, Printer, Trash2, RefreshCw, ChevronDown, X, Edit } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 const formatIndianNumber = (val) => {
   if (val === undefined || val === null || val === '') return '';
@@ -860,7 +861,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
             {filteredSales.map((sale, index) => (
               <tr key={sale.id} className="hover:bg-slate-50 border-b border-gray-200 group">
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{getInvoiceNo(sale)}</td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">{new Date(sale.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">{formatDateClean(sale.date, true)}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
                   <div>{sale.model}</div>
                   {(sale.customerName || sale.customerPhone) && (
@@ -1663,7 +1664,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                     <p className="text-sm font-semibold text-gray-600 mt-1">Sales Report ({filterLabel})</p>
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    <p>Date: {new Date().toLocaleDateString()}</p>
+                    <p>Date: {formatDateClean(new Date())}</p>
                     <p>Total Sales Records: {filteredSales.length}</p>
                   </div>
                 </div>
@@ -1856,7 +1857,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                   <h2 className="text-4xl font-extrabold text-blue-700 tracking-wider uppercase">INVOICE</h2>
                   <div className="text-right mt-3 text-xs text-gray-600 flex flex-col gap-0.5">
                     <p><span className="font-semibold text-gray-800">Invoice No:</span> {getInvoiceNo(receiptSale)}</p>
-                    <p><span className="font-semibold text-gray-800">Date:</span> {new Date(receiptSale.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                    <p><span className="font-semibold text-gray-800">Date:</span> {formatDateClean(receiptSale.date, true)}</p>
                   </div>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Plus, Banknote, Trash2, History, X, Calendar, Edit2, Search, Printer } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 export default function EmployeesTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
@@ -576,7 +577,7 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
                     return (
                       <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{idx + 1}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-700 font-medium">{dateObj.toLocaleDateString()}</td>
+                        <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-700 font-medium">{formatDateClean(dateObj)}</td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500 text-xs">{dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200">
                           <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mr-2 ${tx.type === 'Commission' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
@@ -656,7 +657,7 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
                   <p className="text-sm font-semibold text-gray-600 mt-1">Employees Payroll Report ({selectedMonth})</p>
                 </div>
                 <div className="text-right text-xs text-gray-500">
-                  <p>Report Date: {new Date().toLocaleDateString('en-IN', { dateStyle: 'long' })}</p>
+                  <p>Report Date: {formatDateClean(new Date())}</p>
                   <p>Total Employees: {visibleEmployees.length}</p>
                 </div>
               </div>

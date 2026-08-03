@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Calendar, Plus, Edit2, Trash2, Printer, ChevronDown, ChevronRight, Check, X, RefreshCw, History, ClipboardList, ShoppingCart, PlusCircle, TrendingUp } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 const formatIndianNumber = (val) => {
   if (val === undefined || val === null || val === '') return '';
@@ -1347,7 +1348,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     return allTx.map((tx, i) => (
                       <tr key={i} className="hover:bg-gray-100 transition-colors">
                         <td className="py-1 px-2 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>
-                        <td className="py-1 px-2 border-r border-gray-200 whitespace-nowrap text-gray-600">{new Date(tx.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td className="py-1 px-2 border-r border-gray-200 whitespace-nowrap text-gray-600">{formatDateClean(tx.date, true)}</td>
                         <td className="py-1 px-2 border-r border-gray-200 text-center font-bold text-gray-700">{tx.qty}</td>
                         <td className="py-1 px-2 text-gray-500 truncate max-w-[200px]" title={tx.details}>{tx.details}</td>
                       </tr>
@@ -1452,7 +1453,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                       return (
                         <tr key={i} className="hover:bg-gray-100 transition-colors">
                           <td className="py-1 px-2 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>
-                          <td className="py-1 px-2 border-r border-gray-200 whitespace-nowrap text-gray-600">{new Date(tx.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                          <td className="py-1 px-2 border-r border-gray-200 whitespace-nowrap text-gray-600">{formatDateClean(tx.date, true)}</td>
                           {!purchaseHistoryItem && <td className="py-1 px-2 border-r border-gray-200 font-bold text-gray-800">{itemName}</td>}
                           <td className="py-1 px-2 border-r border-gray-200 text-center font-bold text-gray-700">{tx.qty}</td>
                           {purchaseHistoryItem && (
@@ -1806,7 +1807,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                       return (
                         <tr key={i} className="hover:bg-gray-100 transition-colors">
                           <td className="py-1 px-2 border-r border-gray-300 text-center font-semibold text-gray-500">{i + 1}</td>
-                          <td className="py-1 px-2 border-r border-gray-300 whitespace-nowrap text-gray-600">{new Date(tx.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                          <td className="py-1 px-2 border-r border-gray-300 whitespace-nowrap text-gray-600">{formatDateClean(tx.date, true)}</td>
                           {!purchaseHistoryItem && <td className="py-1 px-2 border-r border-gray-300 font-bold text-gray-800">{itemName}</td>}
                           <td className="py-1 px-2 border-r border-gray-300 text-center font-bold text-gray-700">{tx.qty}</td>
                           {purchaseHistoryItem && (

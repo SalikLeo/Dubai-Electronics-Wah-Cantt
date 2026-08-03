@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Printer, Trash2, X, Search } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 export default function ExpensesTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
@@ -285,7 +286,7 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
             {filteredExpenses.map((expense, index) => (
               <tr key={expense.id} className="hover:bg-slate-50 border-b border-gray-200 group">
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-xs">{index + 1}</td>
-                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">{new Date(expense.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">{formatDateClean(expense.date, true)}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">{expense.description}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-bold text-red-600">Rs {expense.amount.toLocaleString('en-IN')}</td>
                 <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-500">{expense.remarks}</td>
@@ -372,7 +373,7 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
                     <p className="text-sm font-semibold text-gray-600 mt-1">Expenses Report ({filterLabel})</p>
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    <p>Date: {new Date().toLocaleDateString()}</p>
+                    <p>Date: {formatDateClean(new Date())}</p>
                     <p>Total Records: {filteredExpenses.length}</p>
                   </div>
                 </div>
@@ -391,7 +392,7 @@ export default function ExpensesTab({ data, saveData, activeBranch }) {
                     {filteredExpenses.map((expense, i) => (
                       <tr key={expense.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>
-                        <td className="py-0.5 px-1.5 border-r border-gray-200">{new Date(expense.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td className="py-0.5 px-1.5 border-r border-gray-200">{formatDateClean(expense.date, true)}</td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium">{expense.description}</td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-right font-bold text-red-600">Rs {expense.amount.toLocaleString('en-IN')}</td>
                         <td className="py-0.5 px-1.5 text-gray-600">{expense.remarks}</td>

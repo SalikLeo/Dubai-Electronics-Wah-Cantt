@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit, Share2 } from 'lucide-react';
+import { Save, Plus, Trash2, Download, Upload, Shield, Camera, Lock, Settings, X, List, ChevronUp, ChevronDown, GripVertical, Edit, Share2, RefreshCw } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
 export default function SettingsTab({ data, saveData, activeBranch, fullDbData, saveFullDbData }) {
   const { alert, confirm } = useDialog();
@@ -28,6 +28,28 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
   const [shareStep, setShareStep] = useState(1);
   const [selectedShareCategories, setSelectedShareCategories] = useState([]);
   const [selectedShareBranches, setSelectedShareBranches] = useState([]);
+
+  // Move Stock States
+  const [showMoveStockModal, setShowMoveStockModal] = useState(false);
+  const [selectedMoveBranch, setSelectedMoveBranch] = useState('');
+  const [moveItemsList, setMoveItemsList] = useState([]);
+  const [moveSearchQuery, setMoveSearchQuery] = useState('');
+  const [selectedMoveItem, setSelectedMoveItem] = useState(null);
+  const [moveItemQty, setMoveItemQty] = useState('');
+  const [isMoveDropdownOpen, setIsMoveDropdownOpen] = useState(false);
+  const moveDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (moveDropdownRef.current && !moveDropdownRef.current.contains(event.target)) {
+        setIsMoveDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     setLocalCategories([...(data.categories || [])]);
@@ -399,6 +421,149 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
     await alert(`Successfully shared stock items of selected categories to target branches!`);
   };
 
+  const handleExecuteMove = async () => {
+    if (!selectedMoveBranch) {
+      await alert("Please select a destination branch.");
+      return;
+    }
+    if (moveItemsList.length === 0) {
+      await alert("Please add at least one item to move.");
+      return;
+    }
+
+    const isConfirmed = await confirm(
+      `Are you sure you want to move the selected items to ${selectedMoveBranch} Branch? This will deduct the quantities from ${activeBranch} and add them to ${selectedMoveBranch}.`
+    );
+    if (!isConfirmed) return;
+
+    // Create deep copy of the full database
+    const updatedDb = JSON.parse(JSON.stringify(fullDbData));
+
+    // Get source and target branch data
+    const sourceBranch = updatedDb.branches[activeBranch];
+    const targetBranch = updatedDb.branches[selectedMoveBranch];
+
+    if (!sourceBranch || !targetBranch) {
+      await alert("Branch data not found.");
+      return;
+    }
+
+    const txDateIso = new Date().toISOString();
+
+    for (const moveItem of moveItemsList) {
+      // Find item in source branch
+      const sourceItem = sourceBranch.stock.find(item => item.id === moveItem.stockId);
+      if (!sourceItem) {
+        await alert(`Item "${moveItem.model}" not found in source branch!`);
+        return;
+      }
+
+      // Check current available balance
+      const currentSourceBalance = Math.max(0, (sourceItem.x_b || 0) + (sourceItem.in || 0) - (sourceItem.sale || 0));
+      if (currentSourceBalance < moveItem.qty) {
+        await alert(`Not enough stock for "${moveItem.model}"! Available: ${currentSourceBalance}, Requested: ${moveItem.qty}`);
+        return;
+      }
+
+      // Deduct from source branch
+      sourceItem.in = (sourceItem.in || 0) - moveItem.qty;
+
+      // Add to source branch history
+      const sourceTxId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+      const sourceTx = {
+        id: sourceTxId,
+        date: txDateIso,
+        stockId: sourceItem.id,
+        type: 'Stock In',
+        qty: -moveItem.qty,
+        details: `Moved to ${selectedMoveBranch} Branch`,
+        prevNtd: sourceItem.ntd || 0,
+        newNtd: sourceItem.ntd || 0
+      };
+      if (!sourceBranch.history) sourceBranch.history = [];
+      sourceBranch.history.push(sourceTx);
+
+      // Find or create item in target branch by model name (exact match)
+      let targetItem = targetBranch.stock.find(item => item.model === sourceItem.model);
+      
+      if (targetItem) {
+        // Calculate new NTD (weighted average)
+        const currentTargetNtd = targetItem.ntd || 0;
+        const currentTargetBalance = Math.max(0, (targetItem.x_b || 0) + (targetItem.in || 0) - (targetItem.sale || 0));
+        let newTargetNtd = (currentTargetNtd === 0 || currentTargetBalance <= 0)
+          ? moveItem.ntd
+          : ((currentTargetBalance * currentTargetNtd) + (moveItem.qty * moveItem.ntd)) / (currentTargetBalance + moveItem.qty);
+
+        // Increment target item's Stock In
+        targetItem.in = (targetItem.in || 0) + moveItem.qty;
+        targetItem.ntd = newTargetNtd;
+
+        // Add to target branch history
+        const targetTxId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+        const targetTx = {
+          id: targetTxId,
+          date: txDateIso,
+          stockId: targetItem.id,
+          type: 'Stock In',
+          qty: moveItem.qty,
+          details: `Moved from ${activeBranch} Branch`,
+          prevNtd: currentTargetNtd,
+          newNtd: newTargetNtd
+        };
+        if (!targetBranch.history) targetBranch.history = [];
+        targetBranch.history.push(targetTx);
+      } else {
+        // Ensure category exists in target branch
+        if (!targetBranch.categories) targetBranch.categories = [];
+        if (!targetBranch.categories.includes(sourceItem.category)) {
+          targetBranch.categories.push(sourceItem.category);
+        }
+
+        // Create new item in target branch
+        const targetItemId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+        const newTargetItem = {
+          id: targetItemId,
+          model: sourceItem.model,
+          category: sourceItem.category,
+          x_b: 0,
+          in: moveItem.qty,
+          sale: 0,
+          ntd: sourceItem.ntd
+        };
+        if (!targetBranch.stock) targetBranch.stock = [];
+        targetBranch.stock.push(newTargetItem);
+
+        // Add to target branch history
+        const targetTxId = Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+        const targetTx = {
+          id: targetTxId,
+          date: txDateIso,
+          stockId: targetItemId,
+          type: 'Stock In',
+          qty: moveItem.qty,
+          details: `Moved from ${activeBranch} Branch`,
+          prevNtd: 0,
+          newNtd: sourceItem.ntd
+        };
+        if (!targetBranch.history) targetBranch.history = [];
+        targetBranch.history.push(targetTx);
+      }
+    }
+
+    // Save full database data
+    await saveFullDbData(updatedDb);
+
+    // Reset move states and close modal
+    setShowMoveStockModal(false);
+    setSelectedMoveBranch('');
+    setMoveItemsList([]);
+    setMoveSearchQuery('');
+    setSelectedMoveItem(null);
+    setMoveItemQty('');
+
+    await alert("Stock items successfully moved to target branch!");
+  };
+
   return (
     <div className="h-full flex flex-col p-6">
       <div className="mb-4">
@@ -574,6 +739,33 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium shadow-sm transition text-sm cursor-pointer"
               >
                 <Share2 className="w-4 h-4" /> Share Stock
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Move Stock to Another Branch */}
+        {fullDbData && saveFullDbData && (
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+            <h2 className="text-lg font-bold mb-2 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-emerald-600" /> Move Stock to Another Branch
+            </h2>
+            <p className="text-gray-600 text-sm mb-4">
+              Transfer specific quantity of stock items from <strong>{activeBranch} Branch</strong> to another branch. This will deduct the quantity from {activeBranch} and add it to the destination branch with the same NTD value.
+            </p>
+            <div>
+              <button 
+                onClick={() => {
+                  setSelectedMoveBranch('');
+                  setMoveItemsList([]);
+                  setMoveSearchQuery('');
+                  setSelectedMoveItem(null);
+                  setMoveItemQty('');
+                  setShowMoveStockModal(true);
+                }} 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-medium shadow-sm transition text-sm cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" /> Move Stock
               </button>
             </div>
           </div>
@@ -956,6 +1148,230 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Move Stock Modal */}
+      {showMoveStockModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowMoveStockModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-emerald-600 animate-spin-hover" />
+                Move Stock
+              </h2>
+              <button 
+                type="button" 
+                onClick={() => setShowMoveStockModal(false)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-full transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1">
+              {/* Target Branch Selector */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Select Destination Branch</label>
+                <select
+                  value={selectedMoveBranch}
+                  onChange={e => setSelectedMoveBranch(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                >
+                  <option value="">-- Choose Branch --</option>
+                  {Object.keys(fullDbData.branches)
+                    .filter(bName => bName !== activeBranch)
+                    .map(bName => (
+                      <option key={bName} value={bName}>{bName} Branch</option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Add Item Section */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                <h3 className="text-xs font-bold text-slate-700 mb-3 uppercase tracking-wider">Add Item to Move List</h3>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  
+                  {/* Searchable Dropdown */}
+                  <div className="md:col-span-6 relative" ref={moveDropdownRef}>
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">Search Product Model</label>
+                    <input
+                      type="text"
+                      placeholder={selectedMoveItem ? selectedMoveItem.model : "Type model name to search..."}
+                      value={moveSearchQuery}
+                      onChange={e => {
+                        setMoveSearchQuery(e.target.value);
+                        setIsMoveDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsMoveDropdownOpen(true)}
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                    />
+                    
+                    {isMoveDropdownOpen && (
+                      <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+                        {/* Filtered list */}
+                        {(data.stock || [])
+                          .filter(item => {
+                            const balance = Math.max(0, (item.x_b || 0) + (item.in || 0) - (item.sale || 0));
+                            const isAlreadyAdded = moveItemsList.some(mi => mi.stockId === item.id);
+                            return balance > 0 && 
+                              !isAlreadyAdded && 
+                              item.model.toLowerCase().includes(moveSearchQuery.toLowerCase());
+                          })
+                          .map(item => {
+                            const balance = Math.max(0, (item.x_b || 0) + (item.in || 0) - (item.sale || 0));
+                            return (
+                              <div
+                                key={item.id}
+                                onClick={() => {
+                                  setSelectedMoveItem(item);
+                                  setMoveSearchQuery('');
+                                  setIsMoveDropdownOpen(false);
+                                }}
+                                className="px-4 py-2 hover:bg-slate-100 cursor-pointer flex justify-between items-center text-sm border-b last:border-0"
+                              >
+                                <span className="font-semibold text-gray-800">{item.model}</span>
+                                <div className="text-xs text-gray-500 flex gap-2">
+                                  <span className="bg-slate-150 px-2 py-0.5 rounded font-medium">Qty: {balance}</span>
+                                  <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-bold">Cost: Rs {item.ntd.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        {/* No items found */}
+                        {(data.stock || [])
+                          .filter(item => {
+                            const balance = Math.max(0, (item.x_b || 0) + (item.in || 0) - (item.sale || 0));
+                            const isAlreadyAdded = moveItemsList.some(mi => mi.stockId === item.id);
+                            return balance > 0 && 
+                              !isAlreadyAdded && 
+                              item.model.toLowerCase().includes(moveSearchQuery.toLowerCase());
+                          }).length === 0 && (
+                            <div className="p-3 text-center text-gray-500 text-xs font-semibold">No available items found</div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quantity Input */}
+                  <div className="md:col-span-3">
+                    <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                      Qty {selectedMoveItem ? `(Max: ${Math.max(0, (selectedMoveItem.x_b || 0) + (selectedMoveItem.in || 0) - (selectedMoveItem.sale || 0))})` : ''}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="0"
+                      disabled={!selectedMoveItem}
+                      value={moveItemQty}
+                      onChange={e => setMoveItemQty(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium disabled:bg-slate-100 disabled:cursor-not-allowed text-center"
+                    />
+                  </div>
+
+                  {/* Add Button */}
+                  <div className="md:col-span-3">
+                    <button
+                      type="button"
+                      disabled={!selectedMoveItem || !moveItemQty}
+                      onClick={() => {
+                        const qty = Number(moveItemQty);
+                        const balance = Math.max(0, (selectedMoveItem.x_b || 0) + (selectedMoveItem.in || 0) - (selectedMoveItem.sale || 0));
+                        if (qty <= 0) {
+                          alert("Please enter a valid quantity.");
+                          return;
+                        }
+                        if (qty > balance) {
+                          alert(`Requested quantity (${qty}) exceeds available stock (${balance}).`);
+                          return;
+                        }
+                        setMoveItemsList([...moveItemsList, {
+                          stockId: selectedMoveItem.id,
+                          model: selectedMoveItem.model,
+                          category: selectedMoveItem.category,
+                          qty: qty,
+                          ntd: selectedMoveItem.ntd || 0,
+                          available: balance
+                        }]);
+                        setSelectedMoveItem(null);
+                        setMoveItemQty('');
+                        setMoveSearchQuery('');
+                      }}
+                      className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-lg py-2 font-bold text-sm shadow-sm transition disabled:bg-slate-300 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      Add to List
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items List Table */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-1.5">Items to Move ({moveItemsList.length})</label>
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-slate-50 max-h-52 overflow-y-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-slate-800 text-white text-xs font-semibold uppercase tracking-wider">
+                      <tr>
+                        <th className="p-2 border-r border-slate-700">Model</th>
+                        <th className="p-2 border-r border-slate-700 text-center">Category</th>
+                        <th className="p-2 border-r border-slate-700 text-center">Qty to Move</th>
+                        <th className="p-2 border-r border-slate-700 text-right">NTD (Cost)</th>
+                        <th className="p-2 text-center w-16">Remove</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-xs">
+                      {moveItemsList.map((item, index) => (
+                        <tr key={index} className="bg-white hover:bg-slate-50 border-b last:border-0 font-medium">
+                          <td className="p-2 border-r border-gray-200 font-bold text-gray-800">{item.model}</td>
+                          <td className="p-2 border-r border-gray-200 text-center text-gray-500">{item.category}</td>
+                          <td className="p-2 border-r border-gray-200 text-center font-bold text-emerald-600">{item.qty}</td>
+                          <td className="p-2 border-r border-gray-200 text-right text-gray-700">Rs {item.ntd.toLocaleString('en-IN')}</td>
+                          <td className="p-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMoveItemsList(moveItemsList.filter((_, i) => i !== index));
+                              }}
+                              className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4 mx-auto" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {moveItemsList.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="p-4 text-center text-gray-400 font-semibold italic">
+                            No items added to the move list yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end mt-4 border-t pt-3">
+              <button 
+                type="button" 
+                onClick={() => setShowMoveStockModal(false)} 
+                className="px-5 py-2.5 text-gray-650 hover:bg-gray-100 rounded-lg font-semibold text-sm transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                disabled={moveItemsList.length === 0 || !selectedMoveBranch}
+                onClick={handleExecuteMove} 
+                className={`px-6 py-2.5 text-white rounded-lg font-bold text-sm shadow-sm transition cursor-pointer ${
+                  moveItemsList.length === 0 || !selectedMoveBranch ? 'bg-emerald-400 cursor-not-allowed opacity-60' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                Confirm Transfer
+              </button>
+            </div>
           </div>
         </div>
       )}

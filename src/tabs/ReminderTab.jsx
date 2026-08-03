@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Printer, Trash2, X, Search, Bell, Check, Calendar } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 export default function ReminderTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
@@ -373,7 +374,7 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
                     {index + 1}
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">
-                    {new Date(reminder.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    {formatDateClean(reminder.createdAt, true)}
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 font-medium text-gray-900">
                     {reminder.itemName}
@@ -397,7 +398,7 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">
                     {reminder.completedAt ? (
-                      new Date(reminder.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                      formatDateClean(reminder.completedAt, true)
                     ) : (
                       <span className="text-gray-400 italic">—</span>
                     )}
@@ -571,8 +572,8 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
                     <p className="text-xs font-bold text-gray-500 tracking-wide uppercase mt-0.5">{activeBranch} Branch</p>
                     <p className="text-sm font-semibold text-gray-600 mt-1">Stock Reminders Report ({filterLabel})</p>
                   </div>
-                  <div className="text-right text-xs text-gray-500">
-                    <p>Date: {new Date().toLocaleDateString()}</p>
+                   <div className="text-right text-xs text-gray-500">
+                    <p>Date: {formatDateClean(new Date())}</p>
                     <p>Total Records: {filteredReminders.length}</p>
                   </div>
                 </div>
@@ -594,7 +595,7 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
                     {filteredReminders.map((reminder, i) => (
                       <tr key={reminder.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50 border-b border-gray-200'}>
                         <td className="py-1 px-1.5 border-r border-gray-200 text-center font-semibold text-gray-500">{i + 1}</td>
-                        <td className="py-1 px-1.5 border-r border-gray-200">{new Date(reminder.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+                         <td className="py-1 px-1.5 border-r border-gray-200">{formatDateClean(reminder.createdAt, true)}</td>
                         <td className="py-1 px-1.5 border-r border-gray-200 font-medium">{reminder.itemName}</td>
                         <td className="py-1 px-1.5 border-r border-gray-200">{reminder.category}</td>
                         <td className="py-1 px-1.5 border-r border-gray-200 text-center font-semibold">{reminder.qty}</td>
@@ -603,9 +604,9 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
                             {reminder.status === 'pending' ? 'Pending' : 'Received'}
                           </span>
                         </td>
-                        <td className="py-1 px-1.5 border-r border-gray-200">
+                         <td className="py-1 px-1.5 border-r border-gray-200">
                           {reminder.completedAt ? (
-                            new Date(reminder.completedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                            formatDateClean(reminder.completedAt, true)
                           ) : (
                             <span className="text-gray-400 italic">—</span>
                           )}

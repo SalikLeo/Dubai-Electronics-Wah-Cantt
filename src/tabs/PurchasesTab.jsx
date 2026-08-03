@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Plus, Printer, Trash2, ChevronDown, X } from 'lucide-react';
 import { useDialog } from '../components/DialogProvider.jsx';
+import { formatDateClean } from '../utils/date';
 
 const formatIndianNumber = (val) => {
   if (val === undefined || val === null || val === '') return '';
@@ -606,7 +607,7 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
                 <tr key={tx.id} className="hover:bg-slate-50 border-b border-gray-200 group">
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-center font-bold text-gray-500 text-[10px]">{idx + 1}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600 whitespace-nowrap">
-                    {new Date(tx.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {formatDateClean(tx.date, true)}
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 font-bold text-gray-850">{tx.model}</td>
                   <td className="py-0.5 px-1.5 border-r border-gray-200 text-gray-600">{tx.category}</td>
@@ -839,7 +840,7 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
                 <div className="text-right text-xs text-gray-500">
                   <p>Filter Timeframe: {filterLabel}</p>
                   {searchQuery.trim() && <p>Search Query: "{searchQuery}"</p>}
-                  <p>Printed: {new Date().toLocaleString()}</p>
+                  <p>Printed: {formatDateClean(new Date(), true)}</p>
                 </div>
               </div>
 
@@ -860,7 +861,7 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
                   {filteredPurchases.map((tx, i) => (
                     <tr key={tx.id}>
                       <td className="py-1 px-2 border-r border-gray-300 text-center text-gray-500 font-semibold">{i + 1}</td>
-                      <td className="py-1 px-2 border-r border-gray-300 text-gray-600 whitespace-nowrap">{new Date(tx.date).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td className="py-1 px-2 border-r border-gray-300 text-gray-600 whitespace-nowrap">{formatDateClean(tx.date, true)}</td>
                       <td className="py-1 px-2 border-r border-gray-300 font-bold text-gray-800">{tx.model}</td>
                       <td className="py-1 px-2 border-r border-gray-300 text-gray-650">{tx.category}</td>
                       <td className="py-1 px-2 border-r border-gray-300 text-center font-bold text-gray-700">{tx.qty}</td>
@@ -932,7 +933,7 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
                   <h2 className="text-4xl font-extrabold text-blue-700 tracking-wider uppercase">PURCHASE INVOICE</h2>
                   <div className="text-right mt-3 text-xs text-gray-600 flex flex-col gap-0.5">
                     <p><span className="font-semibold text-gray-800">Transaction ID:</span> {receiptTx.id}</p>
-                    <p><span className="font-semibold text-gray-800">Date:</span> {new Date(receiptTx.date).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                    <p><span className="font-semibold text-gray-800">Date:</span> {formatDateClean(receiptTx.date, true)}</p>
                   </div>
                 </div>
               </div>

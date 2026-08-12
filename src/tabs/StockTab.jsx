@@ -1594,6 +1594,73 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 totals: grandTotals
               });
 
+              // Monthly Summary Calculations
+              const activeMonth = filterType === 'Monthly' 
+                ? selectedMonth 
+                : (filterType === 'Daily' && selectedDate ? selectedDate.substring(0, 7) : todayYMD.substring(0, 7));
+              
+              const [year, month] = activeMonth.split('-').map(Number);
+              const prevMonthEnd = new Date(year, month - 1, 0);
+              const prevMonthEndDateStr = `${prevMonthEnd.getFullYear()}-${String(prevMonthEnd.getMonth() + 1).padStart(2, '0')}-${String(prevMonthEnd.getDate()).padStart(2, '0')}`;
+
+              let opnBln = 0;
+              (data.stock || []).forEach(item => {
+                const stockInfo = getItemStockForDate(item, prevMonthEndDateStr);
+                opnBln += stockInfo.blnc * (item.ntd || 0);
+              });
+
+              let addedStk = 0;
+              (data.history || []).forEach(h => {
+                if (h.type === 'Stock In' && h.date) {
+                  const dateObj = new Date(h.date);
+                  if (!isNaN(dateObj.getTime())) {
+                    const y = dateObj.getFullYear();
+                    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const ym = `${y}-${m}`;
+                    if (ym === activeMonth) {
+                      let addedNtd = 0;
+                      const match = h.details ? h.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
+                      if (match) {
+                        addedNtd = parseFloat(match[1].replace(/,/g, ''));
+                      } else {
+                        addedNtd = h.newNtd || 0;
+                      }
+                      addedStk += h.qty * addedNtd;
+                    }
+                  }
+                }
+              });
+
+              let totalSale = 0;
+              (data.sales || []).forEach(s => {
+                const dateObj = new Date(s.date);
+                if (!isNaN(dateObj.getTime())) {
+                  const y = dateObj.getFullYear();
+                  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                  const ym = `${y}-${m}`;
+                  if (ym === activeMonth) {
+                    const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+                    items.forEach(item => {
+                      const stockItem = data.stock.find(st => st.id === item.stockId);
+                      if (stockItem) {
+                        totalSale += Number(item.qty || 0) * (stockItem.ntd || 0);
+                      }
+                    });
+                  }
+                }
+              });
+
+              const clsBln = opnBln + addedStk - totalSale;
+
+              const summaryData = { activeMonth, opnBln, addedStk, totalSale, clsBln };
+
+              const formatMonthName = (ym) => {
+                if (!ym) return '';
+                const [y, m] = ym.split('-');
+                const d = new Date(y, m - 1, 1);
+                return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+              };
+
               // Pagination: Fill left column first, then right column
               const maxRowsPerColumn = 50;
               const maxRowsPerPage = maxRowsPerColumn * 2;
@@ -1745,6 +1812,38 @@ export default function StockTab({ data, saveData, activeBranch }) {
                           {renderTable(page.right)}
                         </div>
                       </div>
+
+                      {pageIdx === pages.length - 1 && (
+                        <div className="mt-8 border-t-2 border-slate-900 pt-4 print:mt-4 break-inside-avoid" style={{ breakInside: 'avoid' }}>
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 mb-2">Month Summary ({formatMonthName(summaryData.activeMonth)})</h3>
+                          <table className="w-full text-left text-xs border-collapse border border-black max-w-sm" style={{ tableLayout: 'fixed' }}>
+                            <thead>
+                              <tr className="bg-slate-200 font-bold border-b border-black" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <th className="py-1.5 px-2 border-r border-black font-bold text-[8px] uppercase bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Description</th>
+                                <th className="py-1.5 px-2 text-right font-bold text-[8px] uppercase bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-black">
+                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Opn Bln (Opening Balance)</td>
+                                <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.opnBln.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                              </tr>
+                              <tr className="border-b border-black">
+                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Added Stk (Added Stock)</td>
+                                <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.addedStk.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                              </tr>
+                              <tr className="border-b border-black">
+                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Total Sale (excluding profits)</td>
+                                <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.totalSale.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                              </tr>
+                              <tr className="font-bold bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <td className="py-1 px-2 border-r border-black text-[9px] text-slate-900 uppercase bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Cls Bln (Closing Balance)</td>
+                                <td className="py-1 px-2 text-right text-[9px] text-black bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Rs {summaryData.clsBln.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
 
                     </div>
                   ))}

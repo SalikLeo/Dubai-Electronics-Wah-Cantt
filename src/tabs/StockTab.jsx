@@ -1797,7 +1797,15 @@ export default function StockTab({ data, saveData, activeBranch }) {
                           {data.settings?.branchAddress && <p className="text-[10px] text-gray-500 mt-0.5">{data.settings.branchAddress}</p>}
                         </div>
                         <div className="text-right text-xs text-gray-500">
-                          <p>Report Date: {formatReportDate(selectedDate)}</p>
+                          <p>
+                            {filterType === 'Monthly' 
+                              ? `Report Month: ${formatMonthName(summaryData.activeMonth)}` 
+                              : (filterType === 'Annual' 
+                                  ? `Report Year: ${selectedYear}` 
+                                  : `Report Date: ${formatReportDate(selectedDate)}`
+                                )
+                            }
+                          </p>
                           <p>Total Stock Items: {filteredStock.length}</p>
                           {pages.length > 1 && <p className="font-semibold text-slate-700">Page {pageIdx + 1} of {pages.length}</p>}
                         </div>

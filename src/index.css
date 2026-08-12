@@ -85,10 +85,17 @@ option {
 .printable-area td, 
 .printable-area tbody, 
 .printable-area table {
-  background: white !important;
-  background-color: white !important;
+  background-color: white;
   color: black !important;
   border-color: black !important;
+}
+
+.printable-area .bg-slate-200 {
+  background-color: #e2e8f0 !important;
+}
+
+.printable-area .bg-slate-400 {
+  background-color: #cbd5e1 !important;
 }
 
 

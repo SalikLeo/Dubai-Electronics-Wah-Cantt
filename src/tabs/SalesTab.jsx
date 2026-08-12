@@ -104,6 +104,13 @@ export default function SalesTab({ data, saveData, activeBranch }) {
     return formatDateDMY(dateYMD);
   };
 
+  const formatMonthName = (ym) => {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
   const [selectedMonth, setSelectedMonth] = useState(currentYM);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [startDate, setStartDate] = useState(todayYMD);
@@ -1664,7 +1671,15 @@ export default function SalesTab({ data, saveData, activeBranch }) {
                     <p className="text-sm font-semibold text-gray-600 mt-1">Sales Report ({filterLabel})</p>
                   </div>
                   <div className="text-right text-xs text-gray-500">
-                    <p>Date: {formatDateClean(new Date())}</p>
+                    <p>
+                      {filterType === 'Monthly' 
+                        ? `Report Month: ${formatMonthName(selectedMonth)}` 
+                        : (filterType === 'Annual' 
+                            ? `Report Year: ${selectedYear}` 
+                            : `Report Date: ${formatReportDate(selectedDate)}`
+                          )
+                      }
+                    </p>
                     <p>Total Sales Records: {filteredSales.length}</p>
                   </div>
                 </div>

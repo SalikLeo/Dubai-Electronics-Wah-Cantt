@@ -10,6 +10,13 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }, []);
 
+  const formatMonthName = (ym) => {
+    if (!ym) return '';
+    const [y, m] = ym.split('-');
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+
   const [selectedMonth, setSelectedMonth] = useState(currentYM);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -657,7 +664,7 @@ export default function EmployeesTab({ data, saveData, activeBranch }) {
                   <p className="text-sm font-semibold text-gray-600 mt-1">Employees Payroll Report ({selectedMonth})</p>
                 </div>
                 <div className="text-right text-xs text-gray-500">
-                  <p>Report Date: {formatDateClean(new Date())}</p>
+                  <p>Report Month: {formatMonthName(selectedMonth)}</p>
                   <p>Total Employees: {visibleEmployees.length}</p>
                 </div>
               </div>

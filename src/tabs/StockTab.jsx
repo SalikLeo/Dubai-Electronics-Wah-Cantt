@@ -1612,7 +1612,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 if (row.type === 'header') {
                   return (
                     <tr key={`h-${row.categoryName}-${i}`} className="bg-slate-400 font-bold border-b border-black" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                      <td colSpan={8} className="py-1 px-0.5 text-black uppercase text-[10px] truncate">
+                      <td colSpan={8} className="py-1 px-0.5 text-black uppercase text-[10px] truncate bg-slate-400 font-bold border-b border-black" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                         {row.categoryName} ({row.count} items)
                       </td>
                     </tr>
@@ -1635,27 +1635,27 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 } else if (row.type === 'total') {
                   return (
                     <tr key={`t-${row.categoryName}-${i}`} className="bg-white font-bold border-b border-black font-sans leading-none">
-                      <td className="py-1 px-0.5 border-r border-black uppercase text-slate-800 font-bold text-[8px]">Total</td>
-                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[8px]">{row.catTotals.x_b}</td>
-                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[8px] ${row.catTotals.in > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.in > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.in}</td>
-                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[8px]">{row.catTotals.tb}</td>
-                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[8px] ${row.catTotals.sale > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.sale > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.sale}</td>
-                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold ${row.catTotals.blnc > 0 ? 'text-green-700' : 'text-red-650'} text-[8px]`}>{row.catTotals.blnc}</td>
-                      <td className="py-1 px-0.5 border-r border-black text-right font-bold text-slate-800 text-[8px]">-</td>
-                      <td className="py-1 px-0.5 text-right font-bold text-black text-[8px]">{row.catTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                      <td className="py-1 px-0.5 border-r border-black uppercase text-slate-800 font-bold text-[9px]">Total</td>
+                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[9px]">{row.catTotals.x_b}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[9px] ${row.catTotals.in > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.in > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.in}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-center font-bold text-slate-800 text-[9px]">{row.catTotals.tb}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold text-[9px] ${row.catTotals.sale > 0 ? 'bg-slate-400 text-black' : 'text-slate-800'}`} style={row.catTotals.sale > 0 ? { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>{row.catTotals.sale}</td>
+                      <td className={`py-1 px-0.5 border-r border-black text-center font-bold ${row.catTotals.blnc > 0 ? 'text-green-700' : 'text-red-650'} text-[9px]`}>{row.catTotals.blnc}</td>
+                      <td className="py-1 px-0.5 border-r border-black text-right font-bold text-slate-800 text-[9px]">-</td>
+                      <td className="py-1 px-0.5 text-right font-bold text-black text-[9px]">{row.catTotals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                     </tr>
                   );
                 } else if (row.type === 'grand_total') {
                   return (
                     <tr key={`gt-${i}`} className="bg-slate-900 text-white font-bold border-b border-black font-sans leading-none" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                      <td className="py-1.5 px-0.5 border-r border-slate-700 uppercase text-white font-bold text-[6px]">Grand Total</td>
-                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[6px]">{row.totals.x_b}</td>
-                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[6px] ${row.totals.in > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.in}</td>
-                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[6px]">{row.totals.tb}</td>
-                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[6px] ${row.totals.sale > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.sale}</td>
-                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold ${row.totals.blnc > 0 ? 'text-green-400' : 'text-red-400'} text-[6px]`}>{row.totals.blnc}</td>
-                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-right font-bold text-white text-[6px]">-</td>
-                      <td className="py-1.5 px-0.5 text-right font-bold text-green-400 text-[6px]">{row.totals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 uppercase text-white font-bold text-[9px]">Grand Total</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[9px]">{row.totals.x_b}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[9px] ${row.totals.in > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.in}</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-white text-[9px]">{row.totals.tb}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold text-[9px] ${row.totals.sale > 0 ? 'bg-slate-700 text-white' : 'text-white'}`}>{row.totals.sale}</td>
+                      <td className={`py-1.5 px-0.5 border-r border-slate-700 text-center font-bold ${row.totals.blnc > 0 ? 'text-green-400' : 'text-red-400'} text-[9px]`}>{row.totals.blnc}</td>
+                      <td className="py-1.5 px-0.5 border-r border-slate-700 text-right font-bold text-white text-[9px]">-</td>
+                      <td className="py-1.5 px-0.5 text-right font-bold text-green-400 text-[9px]">{row.totals.value.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                     </tr>
                   );
                 }

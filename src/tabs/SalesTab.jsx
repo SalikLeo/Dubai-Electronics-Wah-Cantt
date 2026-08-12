@@ -118,7 +118,7 @@ export default function SalesTab({ data, saveData, activeBranch }) {
 
   const filterLabel = useMemo(() => {
     if (filterType === 'Daily') return `Daily (${formatReportDate(selectedDate)})`;
-    if (filterType === 'Monthly') return `Monthly (${selectedMonth})`;
+    if (filterType === 'Monthly') return `Monthly (${formatMonthName(selectedMonth)})`;
     if (filterType === 'Annual') return `Annual (${selectedYear})`;
     if (filterType === 'Custom') return `Custom (${startDate} to ${endDate})`;
     return 'All Time';

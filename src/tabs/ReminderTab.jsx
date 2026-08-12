@@ -3,6 +3,18 @@ import { Plus, Printer, Trash2, X, Search, Bell, Check, Calendar } from 'lucide-
 import { useDialog } from '../components/DialogProvider.jsx';
 import { formatDateClean } from '../utils/date';
 
+const formatMonthName = (ym) => {
+  if (!ym) return '';
+  const parts = ym.split('-');
+  const year = parts[0];
+  const monthNum = parseInt(parts[1], 10);
+  const months = [
+    "January", "February", "March", "April", "May", "June", 
+    "July", "August", "September", "October", "November", "December"
+  ];
+  return `${months[monthNum - 1]} ${year}`;
+};
+
 export default function ReminderTab({ data, saveData, activeBranch }) {
   const { alert, confirm } = useDialog();
 
@@ -53,7 +65,7 @@ export default function ReminderTab({ data, saveData, activeBranch }) {
 
   const filterLabel = useMemo(() => {
     if (filterType === 'Daily') return `Daily (${selectedDate})`;
-    if (filterType === 'Monthly') return `Monthly (${selectedMonth})`;
+    if (filterType === 'Monthly') return `Monthly (${formatMonthName(selectedMonth)})`;
     if (filterType === 'Annual') return `Annual (${selectedYear})`;
     if (filterType === 'Custom') return `Custom (${startDate} to ${endDate})`;
     return 'All Time';

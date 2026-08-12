@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 const DialogContext = createContext();
 
@@ -19,13 +19,34 @@ export function DialogProvider({ children }) {
   const confirm = useCallback((message) => showDialog(message, true), [showDialog]);
   const alert = useCallback((message) => showDialog(message, false), [showDialog]);
 
-  const handleClose = (id, result) => {
+  const handleClose = useCallback((id, result) => {
     setDialogs(prev => {
       const dialog = prev.find(d => d.id === id);
       if (dialog) dialog.resolve(result);
       return prev.filter(d => d.id !== id);
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (dialogs.length === 0) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const activeDialog = dialogs[dialogs.length - 1];
+        handleClose(activeDialog.id, true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        const activeDialog = dialogs[dialogs.length - 1];
+        handleClose(activeDialog.id, false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [dialogs, handleClose]);
 
   return (
     <DialogContext.Provider value={{ confirm, alert }}>

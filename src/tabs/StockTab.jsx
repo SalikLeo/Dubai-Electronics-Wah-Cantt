@@ -186,17 +186,35 @@ export default function StockTab({ data, saveData, activeBranch }) {
     };
     const txDateIso = getTransactionDate();
 
-    const newTx = {
+    const newHistory = [...(data.history || [])];
+
+    const initialTx = {
       id: Date.now().toString() + '1',
       date: txDateIso,
       stockId: newItem.id,
       type: 'Initial Stock',
-      qty: newItem.x_b + newItem.in,
+      qty: newItem.x_b,
       details: `Cost: Rs ${newItem.ntd.toLocaleString('en-IN')} (NTD)`,
       prevNtd: 0,
       newNtd: newItem.ntd
     };
-    saveData({ ...data, stock: [...data.stock, newItem], history: [...(data.history || []), newTx] });
+    newHistory.push(initialTx);
+
+    if (newItem.in > 0) {
+      const inTx = {
+        id: Date.now().toString() + '2',
+        date: txDateIso,
+        stockId: newItem.id,
+        type: 'Stock In',
+        qty: newItem.in,
+        details: `Cost: Rs ${newItem.ntd.toLocaleString('en-IN')} (NTD)`,
+        prevNtd: newItem.ntd,
+        newNtd: newItem.ntd
+      };
+      newHistory.push(inTx);
+    }
+
+    saveData({ ...data, stock: [...data.stock, newItem], history: newHistory });
     if (keepOpen) {
       setAddForm({ model: '', category: addForm.category, x_b: '', in: '', sale: '', ntd: '' });
     } else {

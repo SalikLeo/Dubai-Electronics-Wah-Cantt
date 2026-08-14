@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -69,7 +69,9 @@ const DEFAULT_BRANCH_DATA = {
   stock: [],
   sales: [],
   expenses: [],
-  employees: []
+  employees: [],
+  history: [],
+  reminders: []
 };
 
 // Initial Multi-Branch Database Structure
@@ -176,6 +178,16 @@ ipcMain.handle('get-data', () => {
           parsedData.branches[b].settings.branchPhone = "051-4916830";
         }
         needsSave = true;
+      } else {
+        // Ensure history and reminders arrays are initialized on all existing branches
+        if (!parsedData.branches[b].history) {
+          parsedData.branches[b].history = [];
+          needsSave = true;
+        }
+        if (!parsedData.branches[b].reminders) {
+          parsedData.branches[b].reminders = [];
+          needsSave = true;
+        }
       }
     }
 
@@ -196,6 +208,26 @@ ipcMain.handle('save-data', (event, data) => {
     return { success: true };
   } catch (error) {
     console.error('Failed to save data', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('clear-all-data', async () => {
+  try {
+    if (fs.existsSync(dataPath)) {
+      fs.unlinkSync(dataPath);
+    }
+    
+    if (session.defaultSession) {
+      await session.defaultSession.clearStorageData();
+      await session.defaultSession.clearCache();
+    }
+
+    app.relaunch();
+    app.exit(0);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to clear all app data:', error);
     return { success: false, error: error.message };
   }
 });

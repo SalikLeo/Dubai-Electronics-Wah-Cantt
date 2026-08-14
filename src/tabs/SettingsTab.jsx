@@ -236,10 +236,15 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
 
   const triggerClearDataFinal = async () => {
     if (await confirm('Are you sure you want to delete all app data completely? This will clear all stock, sales, expenses, employees, and settings for ALL branches. This action cannot be undone!')) {
+      if (window.api && window.api.clearAllData) {
+        await window.api.clearAllData();
+        return;
+      }
+
       const DEFAULT_BRANCH_DATA = {
         settings: { appIcon: null, password: "", branchAddress: "", branchPhone: "" },
         categories: ["Refrigerators", "Deep Freezers", "Washing Machines", "Air Conditioners", "Microwave Ovens"],
-        stock: [], sales: [], expenses: [], employees: []
+        stock: [], sales: [], expenses: [], employees: [], history: [], reminders: []
       };
       
       const clearedDb = {
@@ -298,6 +303,13 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
             
             // Check if it's the new multi-branch format
             if (imported.branches && (imported.branches["Wah Cantt"] || imported.branches["Pindi Gheb"] || imported.branches["Fateh Jung"])) {
+              // Ensure history and reminders exist on all branches
+              for (const b of ["Wah Cantt", "Pindi Gheb", "Fateh Jung"]) {
+                if (imported.branches[b]) {
+                  if (!imported.branches[b].history) imported.branches[b].history = [];
+                  if (!imported.branches[b].reminders) imported.branches[b].reminders = [];
+                }
+              }
               await saveFullDbData(imported);
               await alert('All branch data restored successfully!');
               setLocalCategories(imported.branches[activeBranch]?.categories || []);
@@ -312,8 +324,11 @@ export default function SettingsTab({ data, saveData, activeBranch, fullDbData, 
               const DEFAULT_BRANCH_DATA = {
                 settings: { appIcon: null, password: "", branchAddress: "", branchPhone: "" },
                 categories: ["Refrigerators", "Deep Freezers", "Washing Machines", "Air Conditioners", "Microwave Ovens"],
-                stock: [], sales: [], expenses: [], employees: []
+                stock: [], sales: [], expenses: [], employees: [], history: [], reminders: []
               };
+              
+              if (!imported.history) imported.history = [];
+              if (!imported.reminders) imported.reminders = [];
               
               const migratedDb = {
                 activeBranch: activeBranch, // keep current active branch selection

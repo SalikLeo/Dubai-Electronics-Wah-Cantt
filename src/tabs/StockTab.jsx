@@ -567,41 +567,30 @@ export default function StockTab({ data, saveData, activeBranch }) {
     }
 
     const { stockInMap, salesMap } = processedStockData;
-    const diffDays = getDaysAgo(dateYMD);
     const stockInHistory = stockInMap[item.id] || [];
     const salesHistory = salesMap[item.id] || [];
 
-    let inBefore = 0;
-    let inOnRange = 0;
+    let inQty = 0;
     for (let i = 0; i < stockInHistory.length; i++) {
       const h = stockInHistory[i];
-      if (h.ymd < dateYMD) {
-        inBefore += h.qty;
-      } else if (diffDays > 0 ? (h.ymd >= dateYMD && h.ymd <= todayYMD) : h.ymd === dateYMD) {
-        inOnRange += h.qty;
+      if (h.ymd <= dateYMD) {
+        inQty += h.qty;
       }
     }
 
-    let saleBefore = 0;
-    let saleOnRange = 0;
+    let saleQty = 0;
     for (let i = 0; i < salesHistory.length; i++) {
       const s = salesHistory[i];
-      if (s.ymd < dateYMD) {
-        saleBefore += s.qty;
-      } else if (diffDays > 0 ? (s.ymd >= dateYMD && s.ymd <= todayYMD) : s.ymd === dateYMD) {
-        saleOnRange += s.qty;
+      if (s.ymd <= dateYMD) {
+        saleQty += s.qty;
       }
     }
 
     const baseXB = Number(item.x_b || 0);
-    const x_b = Math.max(0, baseXB + inBefore - saleBefore);
-    const inQty = inOnRange;
-    const tb = x_b + inQty;
-    const saleQty = saleOnRange;
-    const blnc = tb - saleQty;
+    const blnc = Math.max(0, baseXB + inQty - saleQty);
 
-    return { x_b, in: inQty, tb, sale: saleQty, blnc };
-  }, [itemsStockForSelectedDate, selectedDate, processedStockData, getDaysAgo, todayYMD]);
+    return { x_b: baseXB, in: inQty, tb: baseXB + inQty, sale: saleQty, blnc };
+  }, [itemsStockForSelectedDate, selectedDate, processedStockData]);
 
   // Pre-filter stock list by search term
   const filteredStock = useMemo(() => {
@@ -1838,11 +1827,11 @@ export default function StockTab({ data, saveData, activeBranch }) {
                             </thead>
                             <tbody>
                               <tr className="border-b border-black">
-                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Opn Bln (Opening Balance)</td>
+                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Opening Balance</td>
                                 <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.opnBln.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                               </tr>
                               <tr className="border-b border-black">
-                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Added Stk (Added Stock)</td>
+                                <td className="py-1 px-2 border-r border-black text-[9px] font-semibold text-slate-800">Added Stock</td>
                                 <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.addedStk.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                               </tr>
                               <tr className="border-b border-black">
@@ -1850,7 +1839,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                                 <td className="py-1 px-2 text-right text-[9px] font-bold text-black">Rs {summaryData.totalSale.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                               </tr>
                               <tr className="font-bold bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <td className="py-1 px-2 border-r border-black text-[9px] text-slate-900 uppercase bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Cls Bln (Closing Balance)</td>
+                                <td className="py-1 px-2 border-r border-black text-[9px] text-slate-900 uppercase bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Closing Balance</td>
                                 <td className="py-1 px-2 text-right text-[9px] text-black bg-slate-200" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>Rs {summaryData.clsBln.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
                               </tr>
                             </tbody>

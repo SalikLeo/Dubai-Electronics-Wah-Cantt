@@ -257,7 +257,15 @@ export default function PurchasesTab({ data, saveData, activeBranch }) {
         const allEvents = [
           ...remainingItemHistory.map(h => ({ ...h, eventType: 'history' })),
           ...mappedSales
-        ].sort((a, b) => new Date(a.date) - new Date(b.date));
+        ].sort((a, b) => {
+          const aType = a.type || a.eventType;
+          const bType = b.type || b.eventType;
+          const aIsInitial = aType === 'Initial Stock';
+          const bIsInitial = bType === 'Initial Stock';
+          if (aIsInitial && !bIsInitial) return -1;
+          if (!aIsInitial && bIsInitial) return 1;
+          return new Date(a.date) - new Date(b.date);
+        });
 
         let runningNtd = 0;
         let runningBlnc = 0;

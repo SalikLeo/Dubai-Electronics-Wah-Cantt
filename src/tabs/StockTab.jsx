@@ -376,7 +376,15 @@ export default function StockTab({ data, saveData, activeBranch }) {
         const allEvents = [
           ...remainingItemHistory.map(h => ({ ...h, eventType: 'history' })),
           ...mappedSales
-        ].sort((a, b) => new Date(a.date) - new Date(b.date));
+        ].sort((a, b) => {
+          const aType = a.type || a.eventType;
+          const bType = b.type || b.eventType;
+          const aIsInitial = aType === 'Initial Stock';
+          const bIsInitial = bType === 'Initial Stock';
+          if (aIsInitial && !bIsInitial) return -1;
+          if (!aIsInitial && bIsInitial) return 1;
+          return new Date(a.date) - new Date(b.date);
+        });
 
         let runningNtd = 0;
         let runningBlnc = 0;
@@ -392,7 +400,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 addedNtd = updatedItem.ntd || 0;
               }
               runningNtd = addedNtd;
-              runningBlnc = event.qty - (updatedItem.sale || 0);
+              runningBlnc = event.qty;
             } else if (event.type === 'Stock In') {
               let addedNtd = 0;
               const match = event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/);
@@ -480,6 +488,112 @@ export default function StockTab({ data, saveData, activeBranch }) {
     return { stockInMap, salesMap };
   }, [data.history, data.sales]);
 
+  // Group and sort all stock history and sales events chronologically by stock item
+  const chronologicalEventsByItem = useMemo(() => {
+    const getYMD = (dateString) => {
+      if (!dateString) return '';
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const map = {};
+
+    (data.history || []).forEach(h => {
+      const id = h.stockId;
+      if (!id) return;
+      if (!map[id]) map[id] = [];
+      map[id].push({
+        type: h.type,
+        date: h.date,
+        ymd: getYMD(h.date),
+        qty: Number(h.qty || 0),
+        details: h.details,
+        eventType: 'history'
+      });
+    });
+
+    (data.sales || []).forEach(s => {
+      const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+      items.forEach(item => {
+        const id = item.stockId;
+        if (!id) return;
+        if (!map[id]) map[id] = [];
+        map[id].push({
+          date: s.date,
+          ymd: getYMD(s.date),
+          qty: Number(item.qty || 0),
+          eventType: 'sale'
+        });
+      });
+    });
+
+    Object.keys(map).forEach(id => {
+      map[id].sort((a, b) => {
+        const aType = a.type || a.eventType;
+        const bType = b.type || b.eventType;
+        const aIsInitial = aType === 'Initial Stock';
+        const bIsInitial = bType === 'Initial Stock';
+        if (aIsInitial && !bIsInitial) return -1;
+        if (!aIsInitial && bIsInitial) return 1;
+        return new Date(a.date) - new Date(b.date);
+      });
+    });
+
+    return map;
+  }, [data.history, data.sales]);
+
+  // Helper to calculate the historical running NTD for a given item up to targetYMD
+  const getItemNtdForDate = useCallback((item, targetYMD) => {
+    if (!item) return 0;
+
+    const events = chronologicalEventsByItem[item.id] || [];
+    let runningNtd = item.ntd || 0;
+    let runningBlnc = 0;
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      if (targetYMD && event.ymd > targetYMD) {
+        continue;
+      }
+
+      if (event.eventType === 'history') {
+        if (event.type === 'Initial Stock') {
+          let addedNtd = 0;
+          const match = event.details ? event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
+          if (match) {
+            addedNtd = parseFloat(match[1].replace(/,/g, ''));
+          } else {
+            addedNtd = item.ntd || 0;
+          }
+          runningNtd = addedNtd;
+          runningBlnc = event.qty;
+        } else if (event.type === 'Stock In') {
+          let addedNtd = 0;
+          const match = event.details ? event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
+          if (match) {
+            addedNtd = parseFloat(match[1].replace(/,/g, ''));
+          }
+          runningNtd = (runningNtd === 0 || runningBlnc <= 0)
+            ? addedNtd
+            : ((runningBlnc * runningNtd) + (event.qty * addedNtd)) / (runningBlnc + event.qty);
+          runningBlnc += event.qty;
+        } else if (event.type === 'Price Update') {
+          let addedNtd = 0;
+          const match = event.details ? event.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
+          if (match) {
+            addedNtd = parseFloat(match[1].replace(/,/g, ''));
+          }
+          runningNtd = addedNtd;
+        }
+      } else if (event.eventType === 'sale') {
+        runningBlnc -= event.qty;
+      }
+    }
+
+    return runningNtd;
+  }, [chronologicalEventsByItem]);
+
   // Pre-calculate stock levels for the selectedDate to avoid repeating loops for each render call
   const itemsStockForSelectedDate = useMemo(() => {
     const { stockInMap, salesMap } = processedStockData;
@@ -551,19 +665,20 @@ export default function StockTab({ data, saveData, activeBranch }) {
       const tb = x_b + inQty;
       const saleQty = saleOnRange;
       const blnc = tb - saleQty;
+      const ntd = getItemNtdForDate(item, rangeEnd);
 
-      stockMap[item.id] = { x_b, in: inQty, tb, sale: saleQty, blnc };
+      stockMap[item.id] = { x_b, in: inQty, tb, sale: saleQty, blnc, ntd };
     });
 
     return stockMap;
-  }, [data?.stock, processedStockData, getDaysAgo, selectedDate, selectedMonth, selectedYear, startDate, endDate, filterType, todayYMD]);
+  }, [data?.stock, processedStockData, getDaysAgo, selectedDate, selectedMonth, selectedYear, startDate, endDate, filterType, todayYMD, getItemNtdForDate]);
 
   // Helper to calculate Stock for any date (X-B for selectedDate equals previous date's BLNC)
   // Keeps same signature, but uses the cached itemsStockForSelectedDate for the active date.
   const getItemStockForDate = useCallback((item, dateYMD) => {
-    if (!item) return { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+    if (!item) return { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: 0 };
     if (dateYMD === selectedDate) {
-      return itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+      return itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: item.ntd || 0 };
     }
 
     const { stockInMap, salesMap } = processedStockData;
@@ -588,9 +703,10 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
     const baseXB = Number(item.x_b || 0);
     const blnc = Math.max(0, baseXB + inQty - saleQty);
+    const ntd = getItemNtdForDate(item, dateYMD);
 
-    return { x_b: baseXB, in: inQty, tb: baseXB + inQty, sale: saleQty, blnc };
-  }, [itemsStockForSelectedDate, selectedDate, processedStockData]);
+    return { x_b: baseXB, in: inQty, tb: baseXB + inQty, sale: saleQty, blnc, ntd };
+  }, [itemsStockForSelectedDate, selectedDate, processedStockData, getItemNtdForDate]);
 
   // Pre-filter stock list by search term
   const filteredStock = useMemo(() => {
@@ -685,7 +801,15 @@ export default function StockTab({ data, saveData, activeBranch }) {
     const allEvents = [
       ...itemHistory.map(h => ({ ...h, eventType: 'history' })),
       ...mappedSales
-    ].sort((a, b) => new Date(a.date) - new Date(b.date));
+    ].sort((a, b) => {
+      const aType = a.type || a.eventType;
+      const bType = b.type || b.eventType;
+      const aIsInitial = aType === 'Initial Stock';
+      const bIsInitial = bType === 'Initial Stock';
+      if (aIsInitial && !bIsInitial) return -1;
+      if (!aIsInitial && bIsInitial) return 1;
+      return new Date(a.date) - new Date(b.date);
+    });
 
     let balance = 0;
     let ntd = 0;
@@ -708,7 +832,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
           }
           newNtd = addedNtd;
           ntd = newNtd;
-          balance = event.qty - (item.sale || 0);
+          balance = event.qty;
           pricesMap[event.id] = { prevNtd, newNtd };
         } else if (event.type === 'Stock In') {
           prevNtd = ntd;
@@ -745,8 +869,8 @@ export default function StockTab({ data, saveData, activeBranch }) {
   // Calculations based on selectedDate
   const globalTotalValue = useMemo(() => {
     return (data?.stock || []).reduce((acc, item) => {
-      const { blnc } = itemsStockForSelectedDate[item.id] || { blnc: 0 };
-      return acc + (blnc * (item.ntd || 0));
+      const { blnc, ntd } = itemsStockForSelectedDate[item.id] || { blnc: 0, ntd: item.ntd || 0 };
+      return acc + (blnc * ntd);
     }, 0);
   }, [data?.stock, itemsStockForSelectedDate]);
 
@@ -1017,13 +1141,13 @@ export default function StockTab({ data, saveData, activeBranch }) {
               
               const isExpanded = expandedCats[category] !== false; // default true
               const catTotals = catItems.reduce((totals, item) => {
-                const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                const { x_b, in: inQty, tb, sale: saleQty, blnc, ntd } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: item.ntd || 0 };
                 totals.x_b += x_b;
                 totals.in += inQty;
                 totals.tb += tb;
                 totals.sale += saleQty;
                 totals.blnc += blnc;
-                totals.value += blnc * (item.ntd || 0);
+                totals.value += blnc * ntd;
                 return totals;
               }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: 0 });
 
@@ -1043,7 +1167,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
                   {/* Category Items */}
                   {isExpanded && catItems.map((item, index) => {
-                    const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                    const { x_b, in: inQty, tb, sale: saleQty, blnc, ntd } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: item.ntd || 0 };
                     const editing = isEditing === item.id;
 
                     return (
@@ -1064,10 +1188,10 @@ export default function StockTab({ data, saveData, activeBranch }) {
                         </td>
                         <td className={`py-0.5 px-1.5 border-r border-gray-200 text-center font-bold ${blnc > 0 ? 'text-green-600' : 'text-red-500'}`}>{blnc}</td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-right text-gray-500 print-hidden font-medium">
-                          {editing ? <input type="number" className="border p-1 w-20 text-right rounded" value={editForm.ntd} onChange={e=>setEditForm({...editForm, ntd: e.target.value})} /> : `Rs ${item.ntd?.toLocaleString('en-IN') || 0}`}
+                          {editing ? <input type="number" className="border p-1 w-20 text-right rounded" value={editForm.ntd} onChange={e=>setEditForm({...editForm, ntd: e.target.value})} /> : `Rs ${ntd?.toLocaleString('en-IN') || 0}`}
                         </td>
                         <td className="py-0.5 px-1.5 border-r border-gray-200 text-right text-gray-500 print-hidden font-bold">
-                          Rs {(blnc * (item.ntd || 0)).toLocaleString('en-IN')}
+                          Rs {(blnc * ntd).toLocaleString('en-IN')}
                         </td>
                         <td className="py-0.5 px-1.5 print-hidden">
                           <div className="flex items-center justify-center gap-2">
@@ -1539,13 +1663,13 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 if (catItems.length === 0) return;
 
                 const catTotals = catItems.reduce((totals, item) => {
-                  const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                  const { x_b, in: inQty, tb, sale: saleQty, blnc, ntd } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: item.ntd || 0 };
                   totals.x_b += x_b;
                   totals.in += inQty;
                   totals.tb += tb;
                   totals.sale += saleQty;
                   totals.blnc += blnc;
-                  totals.value += blnc * (item.ntd || 0);
+                  totals.value += blnc * ntd;
                   return totals;
                 }, { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, value: 0 });
 
@@ -1558,7 +1682,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                 });
 
                 catItems.forEach((item, index) => {
-                  const { x_b, in: inQty, tb, sale: saleQty, blnc } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0 };
+                  const { x_b, in: inQty, tb, sale: saleQty, blnc, ntd } = itemsStockForSelectedDate[item.id] || { x_b: 0, in: 0, tb: 0, sale: 0, blnc: 0, ntd: item.ntd || 0 };
                   allRows.push({
                     type: 'item',
                     id: item.id,
@@ -1569,7 +1693,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     tb,
                     saleQty,
                     blnc,
-                    ntd: item.ntd || 0
+                    ntd
                   });
                 });
 
@@ -1607,7 +1731,7 @@ export default function StockTab({ data, saveData, activeBranch }) {
               let opnBln = 0;
               (data.stock || []).forEach(item => {
                 const stockInfo = getItemStockForDate(item, prevMonthEndDateStr);
-                opnBln += stockInfo.blnc * (item.ntd || 0);
+                opnBln += stockInfo.blnc * stockInfo.ntd;
               });
 
               let addedStk = 0;
@@ -1644,7 +1768,9 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     items.forEach(item => {
                       const stockItem = data.stock.find(st => st.id === item.stockId);
                       if (stockItem) {
-                        totalSale += Number(item.qty || 0) * (stockItem.ntd || 0);
+                        const saleDateYMD = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+                        const costPrice = Number(item.ntd !== undefined ? item.ntd : getItemNtdForDate(stockItem, saleDateYMD));
+                        totalSale += Number(item.qty || 0) * costPrice;
                       }
                     });
                   }

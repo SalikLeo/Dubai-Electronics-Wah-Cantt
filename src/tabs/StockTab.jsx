@@ -1730,8 +1730,10 @@ export default function StockTab({ data, saveData, activeBranch }) {
 
               let opnBln = 0;
               (data.stock || []).forEach(item => {
-                const stockInfo = getItemStockForDate(item, prevMonthEndDateStr);
-                opnBln += stockInfo.blnc * stockInfo.ntd;
+                if (selectedCategoryFilter === 'All' || item.category === selectedCategoryFilter) {
+                  const stockInfo = getItemStockForDate(item, prevMonthEndDateStr);
+                  opnBln += stockInfo.blnc * stockInfo.ntd;
+                }
               });
 
               let addedStk = 0;
@@ -1743,34 +1745,38 @@ export default function StockTab({ data, saveData, activeBranch }) {
                     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
                     const ym = `${y}-${m}`;
                     if (ym === activeMonth) {
-                      let addedNtd = 0;
-                      const match = h.details ? h.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
-                      if (match) {
-                        addedNtd = parseFloat(match[1].replace(/,/g, ''));
-                      } else {
-                        addedNtd = h.newNtd || 0;
+                      const stockItem = data.stock.find(st => st.id === h.stockId);
+                      if (stockItem && (selectedCategoryFilter === 'All' || stockItem.category === selectedCategoryFilter)) {
+                        let addedNtd = 0;
+                        const match = h.details ? h.details.match(/Cost: Rs ([\d,.]+) \(NTD\)/) : null;
+                        if (match) {
+                          addedNtd = parseFloat(match[1].replace(/,/g, ''));
+                        } else {
+                          addedNtd = h.newNtd || 0;
+                        }
+                        addedStk += h.qty * addedNtd;
                       }
-                      addedStk += h.qty * addedNtd;
                     }
                   }
                 }
               });
 
+              // Calculate Total Sale (excluding profits) directly from actual sales transactions for the active month
               let totalSale = 0;
               (data.sales || []).forEach(s => {
-                const dateObj = new Date(s.date);
-                if (!isNaN(dateObj.getTime())) {
-                  const y = dateObj.getFullYear();
-                  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const d = new Date(s.date);
+                if (!isNaN(d.getTime())) {
+                  const y = d.getFullYear();
+                  const m = String(d.getMonth() + 1).padStart(2, '0');
                   const ym = `${y}-${m}`;
                   if (ym === activeMonth) {
-                    const items = s.items || [{ stockId: s.stockId, qty: s.qty }];
+                    const items = s.items || [{ stockId: s.stockId, qty: s.qty, ntd: s.ntd, category: s.category }];
                     items.forEach(item => {
                       const stockItem = data.stock.find(st => st.id === item.stockId);
-                      if (stockItem) {
-                        const saleDateYMD = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-                        const costPrice = Number(item.ntd !== undefined ? item.ntd : getItemNtdForDate(stockItem, saleDateYMD));
-                        totalSale += Number(item.qty || 0) * costPrice;
+                      const cat = item.category || (stockItem ? stockItem.category : 'Other');
+                      if (selectedCategoryFilter === 'All' || cat === selectedCategoryFilter) {
+                        const unitNtd = item.ntd !== undefined ? item.ntd : (stockItem ? stockItem.ntd || 0 : 0);
+                        totalSale += (unitNtd * (item.qty || 0));
                       }
                     });
                   }
